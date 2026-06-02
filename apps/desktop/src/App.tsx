@@ -39,6 +39,7 @@ import { SurfaceCard, SectionHeader } from "@agentboard/ui";
 import { api } from "./api";
 import { useAppStore } from "./store";
 import { nextStatus, previousStatus } from "./task-status";
+import { buildTaskRunSummary, type TaskRunSummary } from "./task-run-summary";
 
 function Shell() {
   const navigate = useNavigate();
@@ -468,6 +469,8 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
         .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime())
         .slice(0, 5)
     : [];
+  const taskRunSummary = buildTaskRunSummary(tasks, agentRuns);
+  const selectedTaskRunSummary = selectedTask ? taskRunSummary[selectedTask.id] : null;
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = `${task.title} ${task.description}`.toLowerCase().includes(taskSearch.toLowerCase());
     const matchesPriority = boardPriorityFilter === "All" || task.priority === boardPriorityFilter;
@@ -603,6 +606,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
               tasks={filteredTasks.filter((task) => task.status === status)}
               agentLabels={Object.fromEntries(profiles.map((profile) => [profile.id, profile.name]))}
               packLabels={Object.fromEntries(packs.map((pack) => [pack.id, pack.name]))}
+              runSummary={taskRunSummary}
               onDropTask={(taskId) => updateTask.mutate({ id: taskId, data: { status } })}
               onSelectTask={props.onSelectTask}
               onEditTask={startEditingTask}
@@ -629,6 +633,12 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                 <Content>Included Context Items: {selectedPack?.itemIds.length ?? 0}</Content>
                 <Content>Total Tokens: {selectedPack?.currentTokens ?? 0}</Content>
                 <Content>Budget Remaining: {selectedPack?.remainingTokens ?? 0}</Content>
+                <Divider size="S" marginY="size-100" />
+                <Heading level={5}>Run Summary</Heading>
+                <Content>Total Runs: {selectedTaskRunSummary?.runCount ?? 0}</Content>
+                <Content>Total Tokens Used: {selectedTaskRunSummary?.totalTokens ?? 0}</Content>
+                <Content>Total Estimated Cost: ${selectedTaskRunSummary?.totalCost ?? 0}</Content>
+                <Content>Latest Run Status: {selectedTaskRunSummary?.latestRun?.status ?? "No runs yet"}</Content>
                 <Divider size="S" marginY="size-100" />
                 <Heading level={5}>Context Preview</Heading>
                 {selectedContextItems.length ? (
@@ -739,6 +749,7 @@ function KanbanColumn(props: {
   tasks: TaskDto[];
   agentLabels: Record<string, string>;
   packLabels: Record<string, string>;
+  runSummary: Record<string, TaskRunSummary>;
   onDropTask: (taskId: string) => void;
   onSelectTask: (taskId: string | null) => void;
   onEditTask: (task: TaskDto) => void;
@@ -759,7 +770,9 @@ function KanbanColumn(props: {
       <Heading level={4}>{props.status}</Heading>
       <Content marginBottom="size-100">{props.tasks.length} task{props.tasks.length === 1 ? "" : "s"}</Content>
       <Flex direction="column" gap="size-150">
-        {props.tasks.map((task) => (
+        {props.tasks.map((task) => {
+          const runSummary = props.runSummary[task.id];
+          return (
           <div
             key={task.id}
             className="task-card"
@@ -820,6 +833,12 @@ function KanbanColumn(props: {
                 <Content>
                   Pack: {task.contextPackId ? props.packLabels[task.contextPackId] ?? "Attached" : "No pack"}
                 </Content>
+                <Content>
+                  Runs: {runSummary?.runCount ?? 0} • Tokens: {runSummary?.totalTokens ?? 0}
+                </Content>
+                <Content>
+                  Latest Run: {runSummary?.latestRun?.status ?? "No runs"} • Cost: ${runSummary?.totalCost ?? 0}
+                </Content>
                 <ButtonGroup>
                   <ActionButton onPress={() => props.onSelectTask(task.id)}>Detail</ActionButton>
                   <ActionButton onPress={() => props.onEditTask(task)}>Edit</ActionButton>
@@ -830,7 +849,8 @@ function KanbanColumn(props: {
               </Flex>
             </Well>
           </div>
-        ))}
+          );
+        })}
         {!props.tasks.length ? <Content>No tasks in this lane right now.</Content> : null}
       </Flex>
     </div>
