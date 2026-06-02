@@ -26,7 +26,10 @@ export function buildApp(services: { agentService: AgentService; gitService: Git
   app.decorate("agentService", services.agentService);
   app.decorate("gitService", services.gitService);
 
-  app.register(cors, { origin: true });
+  app.register(cors, {
+    origin: true,
+    methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);

@@ -466,6 +466,8 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   const liftedTask = tasks.find((task) => task.id === liftedTaskId) ?? null;
   const selectedPack = packs.find((pack) => pack.id === selectedTask?.contextPackId) ?? null;
   const selectedContextItems = selectedPack ? contextItems.filter((item) => selectedPack.itemIds.includes(item.id)) : [];
+  const previousSelectedTaskStatus = selectedTask ? previousStatus(selectedTask.status) : null;
+  const nextSelectedTaskStatus = selectedTask ? nextStatus(selectedTask.status) : null;
   const selectedTaskRuns = selectedTask
     ? [...agentRuns]
         .filter((run) => run.taskId === selectedTask.id)
@@ -648,6 +650,22 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                 <Content>Included Context Items: {selectedPack?.itemIds.length ?? 0}</Content>
                 <Content>Total Tokens: {selectedPack?.currentTokens ?? 0}</Content>
                 <Content>Budget Remaining: {selectedPack?.remainingTokens ?? 0}</Content>
+                <ButtonGroup>
+                  <Button
+                    variant="secondary"
+                    isDisabled={!previousSelectedTaskStatus || previousSelectedTaskStatus === selectedTask.status}
+                    onPress={() => updateTask.mutate({ id: selectedTask.id, data: { status: previousSelectedTaskStatus! } })}
+                  >
+                    Move Left
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    isDisabled={!nextSelectedTaskStatus || nextSelectedTaskStatus === selectedTask.status}
+                    onPress={() => updateTask.mutate({ id: selectedTask.id, data: { status: nextSelectedTaskStatus! } })}
+                  >
+                    Move Right
+                  </Button>
+                </ButtonGroup>
                 <Divider size="S" marginY="size-100" />
                 <Heading level={5}>Run Summary</Heading>
                 <Content>Total Runs: {selectedTaskRunSummary?.runCount ?? 0}</Content>
