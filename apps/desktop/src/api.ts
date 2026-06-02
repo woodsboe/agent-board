@@ -54,6 +54,7 @@ export const api = {
   getTasks: (projectId: string) => request<TaskDto[]>(`/tasks?projectId=${projectId}`),
   createTask: (input: CreateTaskInput) => request<TaskDto>("/tasks", { method: "POST", body: JSON.stringify(input) }),
   updateTask: (id: string, input: UpdateTaskInput) => request<TaskDto>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  deleteTask: (id: string) => request<void>(`/tasks/${id}`, { method: "DELETE" }),
   getContextItems: (projectId: string) => request<ContextItemDto[]>(`/context-items?projectId=${projectId}`),
   createContextItem: (input: CreateContextItemInput) => request<ContextItemDto>("/context-items", { method: "POST", body: JSON.stringify(input) }),
   updateContextItem: (id: string, input: UpdateContextItemInput) =>

@@ -25,4 +25,10 @@ export async function taskRoutes(app: FastifyInstance) {
     const task = await app.prisma.task.update({ where: { id }, data });
     return mapTask(task);
   });
+
+  app.delete("/tasks/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await app.prisma.task.delete({ where: { id } });
+    reply.code(204);
+  });
 }

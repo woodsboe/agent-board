@@ -1,5 +1,6 @@
 import { useEffect, useState, type DragEvent } from "react";
 import {
+  ActionMenu,
   ActionButton,
   Button,
   ButtonGroup,
@@ -95,7 +96,7 @@ function Shell() {
   return (
     <Flex direction="column" height="100%" UNSAFE_className="app-shell">
       <Flex gap="size-200" height="100%">
-        <View width="size-3000" padding="size-250" borderEndWidth="thin" borderColor="dark" UNSAFE_className="glass-panel">
+        <View width="size-3000" padding="size-250" borderEndWidth="thin" borderColor="dark" UNSAFE_className="glass-panel sidebar-panel">
           <Heading level={2}>AgentBoard</Heading>
           <Content marginBottom="size-250">Local-first operating system for agentic software projects.</Content>
           <Flex direction="column" gap="size-100" marginTop="size-150">
@@ -484,6 +485,8 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
               key={status}
               status={status}
               tasks={tasks.filter((task) => task.status === status)}
+              agentLabels={Object.fromEntries(profiles.map((profile) => [profile.id, profile.name]))}
+              packLabels={Object.fromEntries(packs.map((pack) => [pack.id, pack.name]))}
               onDropTask={(taskId) => updateTask.mutate({ id: taskId, data: { status } })}
               onSelectTask={props.onSelectTask}
               onMove={(taskId, nextStatus) => updateTask.mutate({ id: taskId, data: { status: nextStatus } })}
@@ -495,7 +498,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
           ))}
         </Flex>
         </View>
-        <View width="size-3400" minWidth="size-3400">
+        <View width="size-3400" minWidth="size-3400" UNSAFE_className="detail-panel">
           <SurfaceCard title="Task Detail Drawer" description="Selected task, context preview, and execution entry point.">
             {selectedTask ? (
               <Flex direction="column" gap="size-100">
@@ -576,6 +579,8 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
 function KanbanColumn(props: {
   status: TaskStatus;
   tasks: TaskDto[];
+  agentLabels: Record<string, string>;
+  packLabels: Record<string, string>;
   onDropTask: (taskId: string) => void;
   onSelectTask: (taskId: string | null) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => void;
@@ -599,11 +604,57 @@ function KanbanColumn(props: {
             className="task-card"
             draggable
             onDragStart={(event: DragEvent<HTMLDivElement>) => event.dataTransfer.setData("text/task-id", task.id)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                props.onMove(task.id, previousStatus(task.status));
+              }
+              if (event.key === "ArrowRight") {
+                event.preventDefault();
+                props.onMove(task.id, nextStatus(task.status));
+              }
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                props.onSelectTask(task.id);
+              }
+              if (event.key.toLowerCase() === "r") {
+                event.preventDefault();
+                props.onRun(task);
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`${task.title} task card`}
           >
             <Well>
               <Flex direction="column" gap="size-100">
-                <Text>{task.title}</Text>
+                <Flex justifyContent="space-between" alignItems="start" gap="size-100">
+                  <View>
+                    <Text>{task.title}</Text>
+                    <Content>{task.priority} priority</Content>
+                  </View>
+                  <ActionMenu
+                    aria-label={`Actions for ${task.title}`}
+                    onAction={(key) => {
+                      if (key === "detail") props.onSelectTask(task.id);
+                      if (key === "run") props.onRun(task);
+                      if (key === "left") props.onMove(task.id, previousStatus(task.status));
+                      if (key === "right") props.onMove(task.id, nextStatus(task.status));
+                    }}
+                  >
+                    <Item key="detail">Open Details</Item>
+                    <Item key="run">Run Agent</Item>
+                    <Item key="left">Move Left</Item>
+                    <Item key="right">Move Right</Item>
+                  </ActionMenu>
+                </Flex>
                 <Content>{task.description}</Content>
+                <Content>
+                  Agent: {task.assignedAgentProfileId ? props.agentLabels[task.assignedAgentProfileId] ?? "Assigned" : "Unassigned"}
+                </Content>
+                <Content>
+                  Pack: {task.contextPackId ? props.packLabels[task.contextPackId] ?? "Attached" : "No pack"}
+                </Content>
                 <ButtonGroup>
                   <ActionButton onPress={() => props.onSelectTask(task.id)}>Detail</ActionButton>
                   <ActionButton onPress={() => props.onRun(task)}>Run Agent</ActionButton>
@@ -626,6 +677,14 @@ function ContextPage() {
   const packsQuery = useQuery({ queryKey: ["context-packs", projectId], queryFn: () => api.getContextPacks(projectId!), enabled: Boolean(projectId) });
   const createItem = useMutation({
     mutationFn: api.createContextItem,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-items", projectId] }),
+  });
+  const updateItem = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateContextItem>[1] }) => api.updateContextItem(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-items", projectId] }),
+  });
+  const deleteItem = useMutation({
+    mutationFn: api.deleteContextItem,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-items", projectId] }),
   });
   const createPack = useMutation({
@@ -660,6 +719,7 @@ function ContextPage() {
   });
   const [packForm, setPackForm] = useState({ name: "", description: "", tokenBudget: 800 });
   const [editingPackId, setEditingPackId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const typeFilterOptions = [{ id: "All", name: "All types" }, ...contextTypes.map((type) => ({ id: type, name: type }))];
   const sortOptions = [
     { id: "updated", name: "Last updated" },
@@ -678,22 +738,38 @@ function ContextPage() {
       if (sortBy === "tokens") return right.tokenEstimate - left.tokenEstimate;
       return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
     });
+  const selectedItems = filteredItems.filter((item) => selectedItemIds.includes(item.id));
+  const availableItems = filteredItems.filter((item) => !selectedItemIds.includes(item.id));
 
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Context" />
       <Flex gap="size-200" wrap>
-        <SurfaceCard title="Create Context Item">
+        <SurfaceCard title={editingItemId ? "Edit Context Item" : "Create Context Item"}>
           <Form>
             <TextField name="context-title" label="Title" value={itemForm.title} onChange={(value) => setItemForm({ ...itemForm, title: value })} />
             <TextField name="context-summary" label="Summary" value={itemForm.summary} onChange={(value) => setItemForm({ ...itemForm, summary: value })} />
             <TextArea name="context-content" label="Content" value={itemForm.content} onChange={(value) => setItemForm({ ...itemForm, content: value })} />
             <TextField name="context-type" label="Type" value={itemForm.type} onChange={(value) => setItemForm({ ...itemForm, type: value })} />
+            <TextField
+              name="context-token-estimate"
+              label="Token Estimate"
+              type="number"
+              value={String(itemForm.tokenEstimate)}
+              onChange={(value) => setItemForm({ ...itemForm, tokenEstimate: Number(value) || 0 })}
+            />
             <TextField name="context-tags" label="Tags" value={itemForm.tags} onChange={(value) => setItemForm({ ...itemForm, tags: value })} />
+            <TextField name="context-source-type" label="Source Type" value={itemForm.sourceType} onChange={(value) => setItemForm({ ...itemForm, sourceType: value })} />
+            <TextField
+              name="context-source-reference"
+              label="Source Reference"
+              value={itemForm.sourceReference}
+              onChange={(value) => setItemForm({ ...itemForm, sourceReference: value })}
+            />
             <Button
               variant="accent"
-              onPress={() =>
-                createItem.mutate({
+              onPress={() => {
+                const payload = {
                   projectId,
                   title: itemForm.title,
                   summary: itemForm.summary,
@@ -703,10 +779,26 @@ function ContextPage() {
                   tags: itemForm.tags.split(",").map((entry) => entry.trim()).filter(Boolean),
                   sourceType: itemForm.sourceType as ContextItemDto["sourceType"],
                   sourceReference: itemForm.sourceReference,
-                })
-              }
+                };
+                if (editingItemId) {
+                  updateItem.mutate({ id: editingItemId, data: payload });
+                } else {
+                  createItem.mutate(payload);
+                }
+                setEditingItemId(null);
+                setItemForm({
+                  title: "",
+                  summary: "",
+                  content: "",
+                  type: "Architecture",
+                  tokenEstimate: 120,
+                  tags: "architecture",
+                  sourceType: "Manual",
+                  sourceReference: "manual",
+                });
+              }}
             >
-              Create Context Item
+              {editingItemId ? "Save Context Item" : "Create Context Item"}
             </Button>
           </Form>
         </SurfaceCard>
@@ -779,15 +871,79 @@ function ContextPage() {
           </TableBody>
         </TableView>
       </SurfaceCard>
-      <SurfaceCard title="Context Packs" description="Available items on the left, selected pack state on the right.">
+      <SurfaceCard title="Context Pack Builder" description="Add and remove context items in the current draft before saving the pack.">
+        <Flex gap="size-150" wrap marginBottom="size-200">
+          <Button variant="secondary" onPress={() => setSelectedItemIds(filteredItems.map((item) => item.id))}>Add All Filtered</Button>
+          <Button variant="secondary" onPress={() => setSelectedItemIds([])}>Clear Draft</Button>
+          <Content>{selectedItemIds.length} items currently selected for this pack draft</Content>
+        </Flex>
+        <Flex gap="size-250" wrap>
+          <View flex>
+            <Heading level={4}>Available Context Items</Heading>
+            {availableItems.length ? availableItems.map((item) => (
+              <Well key={item.id} marginBottom="size-100">
+                <Flex justifyContent="space-between" alignItems="center" gap="size-150">
+                  <View>
+                    <Text>{item.title}</Text>
+                    <Content>{item.type} • {item.tokenEstimate} tokens</Content>
+                    <Content>{item.tags.join(", ")}</Content>
+                  </View>
+                  <Button variant="secondary" onPress={() => setSelectedItemIds([...selectedItemIds, item.id])}>Add</Button>
+                </Flex>
+              </Well>
+            )) : <Content>No more items match the current filters.</Content>}
+          </View>
+          <View flex>
+            <Heading level={4}>Selected For Current Pack</Heading>
+            {selectedItems.length ? selectedItems.map((item) => (
+              <Well key={item.id} marginBottom="size-100">
+                <Flex justifyContent="space-between" alignItems="center" gap="size-150">
+                  <View>
+                    <Text>{item.title}</Text>
+                    <Content>{item.type} • {item.tokenEstimate} tokens</Content>
+                    <Content>{item.tags.join(", ")}</Content>
+                  </View>
+                  <Button variant="secondary" onPress={() => setSelectedItemIds(selectedItemIds.filter((id) => id !== item.id))}>Remove</Button>
+                </Flex>
+              </Well>
+            )) : <Content>No context items selected yet.</Content>}
+          </View>
+        </Flex>
+      </SurfaceCard>
+      <SurfaceCard title="Context Packs" description="Saved packs and maintenance actions.">
         <Flex gap="size-250" wrap>
           <View flex>
             <Heading level={4}>Available Context Items</Heading>
             {(itemsQuery.data ?? []).map((item) => (
               <Well key={item.id} marginBottom="size-100">
-                <Flex justifyContent="space-between">
-                  <Text>{item.title}</Text>
-                  <Text>{item.tokenEstimate} tokens</Text>
+                <Flex justifyContent="space-between" alignItems="center" gap="size-150">
+                  <View>
+                    <Text>{item.title}</Text>
+                    <Content>{item.summary}</Content>
+                    <Content>{item.sourceType} • {item.sourceReference}</Content>
+                    <Content>{item.tokenEstimate} tokens</Content>
+                  </View>
+                  <ButtonGroup>
+                    <Button
+                      variant="secondary"
+                      onPress={() => {
+                        setEditingItemId(item.id);
+                        setItemForm({
+                          title: item.title,
+                          summary: item.summary,
+                          content: item.content,
+                          type: item.type,
+                          tokenEstimate: item.tokenEstimate,
+                          tags: item.tags.join(", "),
+                          sourceType: item.sourceType,
+                          sourceReference: item.sourceReference,
+                        });
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button variant="secondary" onPress={() => deleteItem.mutate(item.id)}>Delete</Button>
+                  </ButtonGroup>
                 </Flex>
               </Well>
             ))}
