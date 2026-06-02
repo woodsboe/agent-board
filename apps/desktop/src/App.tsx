@@ -610,6 +610,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
               onDropTask={(taskId) => updateTask.mutate({ id: taskId, data: { status } })}
               onSelectTask={props.onSelectTask}
               onEditTask={startEditingTask}
+              onQuickUpdate={(taskId, data) => updateTask.mutate({ id: taskId, data })}
               onMove={(taskId, nextStatus) => updateTask.mutate({ id: taskId, data: { status: nextStatus } })}
               onDeleteTask={(taskId) => deleteTask.mutate(taskId)}
               onRun={(task) => {
@@ -753,6 +754,7 @@ function KanbanColumn(props: {
   onDropTask: (taskId: string) => void;
   onSelectTask: (taskId: string | null) => void;
   onEditTask: (task: TaskDto) => void;
+  onQuickUpdate: (taskId: string, data: Partial<TaskDto>) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
   onRun: (task: TaskDto) => void;
@@ -773,82 +775,100 @@ function KanbanColumn(props: {
         {props.tasks.map((task) => {
           const runSummary = props.runSummary[task.id];
           return (
-          <div
-            key={task.id}
-            className="task-card"
-            draggable
-            onDragStart={(event: DragEvent<HTMLDivElement>) => event.dataTransfer.setData("text/task-id", task.id)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                props.onMove(task.id, previousStatus(task.status));
-              }
-              if (event.key === "ArrowRight") {
-                event.preventDefault();
-                props.onMove(task.id, nextStatus(task.status));
-              }
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                props.onSelectTask(task.id);
-              }
-              if (event.key.toLowerCase() === "r") {
-                event.preventDefault();
-                props.onRun(task);
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label={`${task.title} task card`}
-          >
-            <Well>
-              <Flex direction="column" gap="size-100">
-                <Flex justifyContent="space-between" alignItems="start" gap="size-100">
-                  <View>
-                    <Text>{task.title}</Text>
-                    <Content>{task.priority} priority</Content>
-                  </View>
-                  <ActionMenu
-                    aria-label={`Actions for ${task.title}`}
-                    onAction={(key) => {
-                      if (key === "detail") props.onSelectTask(task.id);
-                      if (key === "run") props.onRun(task);
-                      if (key === "edit") props.onEditTask(task);
-                      if (key === "left") props.onMove(task.id, previousStatus(task.status));
-                      if (key === "right") props.onMove(task.id, nextStatus(task.status));
-                      if (key === "delete") props.onDeleteTask(task.id);
-                    }}
-                  >
-                    <Item key="detail">Open Details</Item>
-                    <Item key="run">Run Agent</Item>
-                    <Item key="edit">Edit Task</Item>
-                    <Item key="left">Move Left</Item>
-                    <Item key="right">Move Right</Item>
-                    <Item key="delete">Delete Task</Item>
-                  </ActionMenu>
+            <div
+              key={task.id}
+              className="task-card"
+              draggable
+              onDragStart={(event: DragEvent<HTMLDivElement>) => event.dataTransfer.setData("text/task-id", task.id)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  props.onMove(task.id, previousStatus(task.status));
+                }
+                if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  props.onMove(task.id, nextStatus(task.status));
+                }
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  props.onSelectTask(task.id);
+                }
+                if (event.key.toLowerCase() === "r") {
+                  event.preventDefault();
+                  props.onRun(task);
+                }
+              }}
+              role="group"
+              tabIndex={0}
+              aria-label={`${task.title} task card`}
+            >
+              <Well>
+                <Flex direction="column" gap="size-100">
+                  <Flex justifyContent="space-between" alignItems="start" gap="size-100">
+                    <View>
+                      <Text>{task.title}</Text>
+                      <Content>{task.priority} priority</Content>
+                    </View>
+                    <ActionMenu
+                      aria-label={`Actions for ${task.title}`}
+                      onAction={(key) => {
+                        if (key === "detail") props.onSelectTask(task.id);
+                        if (key === "run") props.onRun(task);
+                        if (key === "edit") props.onEditTask(task);
+                        if (key === "left") props.onMove(task.id, previousStatus(task.status));
+                        if (key === "right") props.onMove(task.id, nextStatus(task.status));
+                        if (key === "delete") props.onDeleteTask(task.id);
+                      }}
+                    >
+                      <Item key="detail">Open Details</Item>
+                      <Item key="run">Run Agent</Item>
+                      <Item key="edit">Edit Task</Item>
+                      <Item key="left">Move Left</Item>
+                      <Item key="right">Move Right</Item>
+                      <Item key="delete">Delete Task</Item>
+                    </ActionMenu>
+                  </Flex>
+                  <Content>{task.description}</Content>
+                  <Content>
+                    Agent: {task.assignedAgentProfileId ? props.agentLabels[task.assignedAgentProfileId] ?? "Assigned" : "Unassigned"}
+                  </Content>
+                  <Content>
+                    Pack: {task.contextPackId ? props.packLabels[task.contextPackId] ?? "Attached" : "No pack"}
+                  </Content>
+                  <Content>
+                    Runs: {runSummary?.runCount ?? 0} • Tokens: {runSummary?.totalTokens ?? 0}
+                  </Content>
+                  <Content>
+                    Latest Run: {runSummary?.latestRun?.status ?? "No runs"} • Cost: ${runSummary?.totalCost ?? 0}
+                  </Content>
+                  <Flex gap="size-100" wrap alignItems="end">
+                    <Picker
+                      aria-label={`Status for ${task.title}`}
+                      items={taskStatuses.map((status) => ({ id: status, name: status }))}
+                      selectedKey={task.status}
+                      onSelectionChange={(key) => props.onQuickUpdate(task.id, { status: String(key) as TaskStatus })}
+                    >
+                      {(item) => <Item key={item.id}>{item.name}</Item>}
+                    </Picker>
+                    <Picker
+                      aria-label={`Priority for ${task.title}`}
+                      items={taskPriorities.map((priority) => ({ id: priority, name: priority }))}
+                      selectedKey={task.priority}
+                      onSelectionChange={(key) => props.onQuickUpdate(task.id, { priority: String(key) as TaskPriority })}
+                    >
+                      {(item) => <Item key={item.id}>{item.name}</Item>}
+                    </Picker>
+                  </Flex>
+                  <ButtonGroup>
+                    <ActionButton onPress={() => props.onSelectTask(task.id)}>Detail</ActionButton>
+                    <ActionButton onPress={() => props.onEditTask(task)}>Edit</ActionButton>
+                    <ActionButton onPress={() => props.onRun(task)}>Run Agent</ActionButton>
+                    <ActionButton onPress={() => props.onMove(task.id, previousStatus(task.status))}>Left</ActionButton>
+                    <ActionButton onPress={() => props.onMove(task.id, nextStatus(task.status))}>Right</ActionButton>
+                  </ButtonGroup>
                 </Flex>
-                <Content>{task.description}</Content>
-                <Content>
-                  Agent: {task.assignedAgentProfileId ? props.agentLabels[task.assignedAgentProfileId] ?? "Assigned" : "Unassigned"}
-                </Content>
-                <Content>
-                  Pack: {task.contextPackId ? props.packLabels[task.contextPackId] ?? "Attached" : "No pack"}
-                </Content>
-                <Content>
-                  Runs: {runSummary?.runCount ?? 0} • Tokens: {runSummary?.totalTokens ?? 0}
-                </Content>
-                <Content>
-                  Latest Run: {runSummary?.latestRun?.status ?? "No runs"} • Cost: ${runSummary?.totalCost ?? 0}
-                </Content>
-                <ButtonGroup>
-                  <ActionButton onPress={() => props.onSelectTask(task.id)}>Detail</ActionButton>
-                  <ActionButton onPress={() => props.onEditTask(task)}>Edit</ActionButton>
-                  <ActionButton onPress={() => props.onRun(task)}>Run Agent</ActionButton>
-                  <ActionButton onPress={() => props.onMove(task.id, previousStatus(task.status))}>Left</ActionButton>
-                  <ActionButton onPress={() => props.onMove(task.id, nextStatus(task.status))}>Right</ActionButton>
-                </ButtonGroup>
-              </Flex>
-            </Well>
-          </div>
+              </Well>
+            </div>
           );
         })}
         {!props.tasks.length ? <Content>No tasks in this lane right now.</Content> : null}
