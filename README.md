@@ -62,6 +62,22 @@ Endpoints after startup:
 - Desktop UI: `http://localhost:5173`
 - API: `http://localhost:4000`
 
+## End-to-End Tests
+
+Install the Playwright browser once:
+
+```bash
+pnpm test:e2e:install
+```
+
+Run the smoke suite:
+
+```bash
+pnpm test:e2e
+```
+
+Artifacts are written to `output/playwright/`.
+
 ## Seed Data
 
 The seed script creates:
@@ -113,6 +129,9 @@ The seed script creates:
 - `pnpm dev`
 - `pnpm build`
 - `pnpm test`
+- `pnpm test:e2e`
+- `pnpm test:e2e:headed`
+- `pnpm test:e2e:install`
 - `pnpm lint`
 - `pnpm db:generate`
 - `pnpm db:migrate`
