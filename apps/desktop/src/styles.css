@@ -1,0 +1,36 @@
+:root {
+  color-scheme: dark;
+  --app-bg: linear-gradient(135deg, #10151f 0%, #172233 50%, #0c1118 100%);
+  --panel-bg: rgba(20, 27, 39, 0.78);
+  --panel-border: rgba(167, 187, 226, 0.18);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--app-bg);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+.app-shell {
+  height: 100%;
+}
+
+.glass-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(18px);
+}
+
+.kanban-column {
+  min-width: 280px;
+}
+
+.task-card {
+  cursor: grab;
+}

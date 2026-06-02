@@ -1,0 +1,22 @@
+{
+  "name": "@agentboard/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@agentboard/domain": "workspace:*",
+    "@agentboard/services": "workspace:*",
+    "@agentboard/shared": "workspace:*",
+    "@fastify/cors": "^11.1.0",
+    "@prisma/client": "^6.9.0",
+    "fastify": "^5.4.0",
+    "simple-git": "^3.27.0",
+    "zod": "^3.25.67"
+  }
+}
