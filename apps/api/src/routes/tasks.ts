@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createTaskInputSchema } from "@agentboard/shared";
+import { createTaskInputSchema, updateTaskInputSchema } from "@agentboard/shared";
 import { mapTask } from "../lib/mappers";
 
 export async function taskRoutes(app: FastifyInstance) {
@@ -21,7 +21,7 @@ export async function taskRoutes(app: FastifyInstance) {
 
   app.patch("/tasks/:id", async (request) => {
     const { id } = request.params as { id: string };
-    const data = createTaskInputSchema.partial().parse(request.body);
+    const data = updateTaskInputSchema.parse(request.body);
     const task = await app.prisma.task.update({ where: { id }, data });
     return mapTask(task);
   });

@@ -1,5 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { createContextItemInputSchema, createContextPackInputSchema } from "@agentboard/shared";
+import {
+  createContextItemInputSchema,
+  createContextPackInputSchema,
+  updateContextItemInputSchema,
+  updateContextPackInputSchema,
+} from "@agentboard/shared";
 import { mapContextItem, mapContextPack } from "../lib/mappers";
 
 export async function contextRoutes(app: FastifyInstance) {
@@ -34,7 +39,7 @@ export async function contextRoutes(app: FastifyInstance) {
 
   app.patch("/context-items/:id", async (request) => {
     const { id } = request.params as { id: string };
-    const input = createContextItemInputSchema.partial().parse(request.body);
+    const input = updateContextItemInputSchema.parse(request.body);
     const item = await app.prisma.contextItem.update({
       where: { id },
       data: { ...input, tags: input.tags ? input.tags.join(",") : undefined },
@@ -80,7 +85,7 @@ export async function contextRoutes(app: FastifyInstance) {
 
   app.patch("/context-packs/:id", async (request) => {
     const { id } = request.params as { id: string };
-    const input = createContextPackInputSchema.partial().parse(request.body);
+    const input = updateContextPackInputSchema.parse(request.body);
     if (input.itemIds) {
       await app.prisma.contextPackItem.deleteMany({ where: { contextPackId: id } });
       await app.prisma.contextPackItem.createMany({
@@ -97,6 +102,12 @@ export async function contextRoutes(app: FastifyInstance) {
       include: { items: { include: { contextItem: true } } },
     });
     return mapContextPack(pack);
+  });
+
+  app.delete("/context-packs/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    await app.prisma.contextPack.delete({ where: { id } });
+    reply.code(204);
   });
 
   app.post("/context-packs/:id/duplicate", async (request, reply) => {

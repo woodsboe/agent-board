@@ -109,6 +109,19 @@ export const agentRunSchema = z.object({
   tokenUsage: tokenUsageSchema.nullable().optional(),
 });
 
+export const contextSnapshotItemSchema = z.object({
+  id: idSchema,
+  title: z.string(),
+  tokenEstimate: z.number().int(),
+  updatedAt: timestampSchema,
+});
+
+export const contextDiffSchema = z.object({
+  added: z.array(contextSnapshotItemSchema),
+  removed: z.array(contextSnapshotItemSchema),
+  modified: z.array(contextSnapshotItemSchema),
+});
+
 export const createProjectInputSchema = projectSchema.omit({
   id: true,
   createdAt: true,
@@ -147,6 +160,12 @@ export const createAgentRunInputSchema = z.object({
   agentProfileId: idSchema,
 });
 
+export const updateProjectInputSchema = createProjectInputSchema.partial();
+export const updatePlanInputSchema = createPlanInputSchema.partial();
+export const updateTaskInputSchema = createTaskInputSchema.partial();
+export const updateContextItemInputSchema = createContextItemInputSchema.partial();
+export const updateContextPackInputSchema = createContextPackInputSchema.partial();
+
 export type ProjectDto = z.infer<typeof projectSchema>;
 export type PlanDto = z.infer<typeof planSchema>;
 export type TaskDto = z.infer<typeof taskSchema>;
@@ -161,6 +180,13 @@ export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
 export type CreateContextItemInput = z.infer<typeof createContextItemInputSchema>;
 export type CreateContextPackInput = z.infer<typeof createContextPackInputSchema>;
 export type CreateAgentRunInput = z.infer<typeof createAgentRunInputSchema>;
+export type UpdateProjectInput = z.infer<typeof updateProjectInputSchema>;
+export type UpdatePlanInput = z.infer<typeof updatePlanInputSchema>;
+export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>;
+export type UpdateContextItemInput = z.infer<typeof updateContextItemInputSchema>;
+export type UpdateContextPackInput = z.infer<typeof updateContextPackInputSchema>;
+export type ContextSnapshotItemDto = z.infer<typeof contextSnapshotItemSchema>;
+export type ContextDiffDto = z.infer<typeof contextDiffSchema>;
 
 export type DashboardDto = {
   projectId: string;
@@ -179,4 +205,8 @@ export type GitDashboardDto = {
   latestCommit: string;
   modifiedFiles: string[];
   untrackedFiles: string[];
+};
+
+export type AgentRunWithDiffDto = AgentRunDto & {
+  contextDiff: ContextDiffDto | null;
 };

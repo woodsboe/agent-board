@@ -27,12 +27,13 @@ import {
   Row,
   Cell,
   Meter,
+  Picker,
   ProgressBar,
 } from "@adobe/react-spectrum";
 import { Routes, Route, NavLink, Navigate, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { taskStatuses, type TaskStatus } from "@agentboard/domain";
-import type { ContextItemDto, ContextPackDto, TaskDto } from "@agentboard/shared";
+import { contextTypes, taskPriorities, taskStatuses, type TaskPriority, type TaskStatus } from "@agentboard/domain";
+import type { AgentRunWithDiffDto, ContextItemDto, ContextPackDto, PlanDto, ProjectDto, TaskDto } from "@agentboard/shared";
 import { SurfaceCard, SectionHeader } from "@agentboard/ui";
 import { api } from "./api";
 import { useAppStore } from "./store";
@@ -212,9 +213,16 @@ function DashboardPage() {
 }
 
 function ProjectsPage() {
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
+  const setActiveProjectId = useAppStore((state) => state.setActiveProjectId);
   const queryClient = useQueryClient();
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: api.getProjects });
   const createProject = useMutation({
     mutationFn: api.createProject,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+  });
+  const updateProject = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateProject>[1] }) => api.updateProject(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
   const [form, setForm] = useState({
@@ -222,17 +230,62 @@ function ProjectsPage() {
     description: "Local-first software project.",
     gitRepositoryPath: ".",
   });
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editingProjectId) return;
+    const project = projectsQuery.data?.find((entry) => entry.id === editingProjectId);
+    if (project) {
+      setForm({
+        name: project.name,
+        description: project.description,
+        gitRepositoryPath: project.gitRepositoryPath,
+      });
+    }
+  }, [editingProjectId, projectsQuery.data]);
 
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Projects" />
-      <SurfaceCard title="Create Project">
+      <SurfaceCard title={editingProjectId ? "Edit Project" : "Create Project"}>
         <Form onSubmit={(event) => event.preventDefault()}>
-          <TextField label="Name" value={form.name} onChange={(value) => setForm({ ...form, name: value })} />
-          <TextArea label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
-          <TextField label="Git Repository Path" value={form.gitRepositoryPath} onChange={(value) => setForm({ ...form, gitRepositoryPath: value })} />
-          <Button variant="accent" onPress={() => createProject.mutate(form)}>Create Project</Button>
+          <TextField name="project-name" label="Name" value={form.name} onChange={(value) => setForm({ ...form, name: value })} />
+          <TextArea name="project-description" label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
+          <TextField name="project-git-path" label="Git Repository Path" value={form.gitRepositoryPath} onChange={(value) => setForm({ ...form, gitRepositoryPath: value })} />
+          <Button
+            variant="accent"
+            onPress={() => {
+              if (editingProjectId) {
+                updateProject.mutate({ id: editingProjectId, data: form });
+              } else {
+                createProject.mutate(form);
+              }
+              setEditingProjectId(null);
+              setForm({ name: "New Project", description: "Local-first software project.", gitRepositoryPath: "." });
+            }}
+          >
+            {editingProjectId ? "Save Project" : "Create Project"}
+          </Button>
         </Form>
+      </SurfaceCard>
+      <SurfaceCard title="Project List">
+        {(projectsQuery.data ?? []).map((project) => (
+          <Well key={project.id} marginBottom="size-150">
+            <Flex justifyContent="space-between" alignItems="center">
+              <View>
+                <Text>{project.name}</Text>
+                <Content>{project.description}</Content>
+                <Content>Repository: {project.gitRepositoryPath}</Content>
+              </View>
+              <ButtonGroup>
+                <Button variant={activeProjectId === project.id ? "accent" : "secondary"} onPress={() => setActiveProjectId(project.id)}>
+                  {activeProjectId === project.id ? "Selected" : "Open"}
+                </Button>
+                <Button variant="secondary" onPress={() => setEditingProjectId(project.id)}>Edit</Button>
+              </ButtonGroup>
+            </Flex>
+          </Well>
+        ))}
       </SurfaceCard>
     </Flex>
   );
@@ -246,6 +299,10 @@ function PlansPage() {
     mutationFn: api.createPlan,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["plans", projectId] }),
   });
+  const updatePlan = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updatePlan>[1] }) => api.updatePlan(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["plans", projectId] }),
+  });
   const approvePlan = useMutation({
     mutationFn: api.approvePlan,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["plans", projectId] }),
@@ -255,18 +312,30 @@ function PlansPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["plans", projectId] }),
   });
   const [form, setForm] = useState({ title: "", description: "" });
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
 
   if (!projectId) return <EmptyState label="No project selected" />;
 
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Plans" />
-      <SurfaceCard title="Create Plan">
+      <SurfaceCard title={editingPlanId ? "Edit Plan" : "Create Plan"}>
         <Form>
-          <TextField label="Title" value={form.title} onChange={(value) => setForm({ ...form, title: value })} />
-          <TextArea label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
-          <Button variant="accent" onPress={() => createPlan.mutate({ projectId, title: form.title, description: form.description, status: "Draft" })}>
-            Create Plan
+          <TextField name="plan-title" label="Title" value={form.title} onChange={(value) => setForm({ ...form, title: value })} />
+          <TextArea name="plan-description" label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
+          <Button
+            variant="accent"
+            onPress={() => {
+              if (editingPlanId) {
+                updatePlan.mutate({ id: editingPlanId, data: { title: form.title, description: form.description } });
+              } else {
+                createPlan.mutate({ projectId, title: form.title, description: form.description, status: "Draft" });
+              }
+              setEditingPlanId(null);
+              setForm({ title: "", description: "" });
+            }}
+          >
+            {editingPlanId ? "Save Plan" : "Create Plan"}
           </Button>
         </Form>
       </SurfaceCard>
@@ -277,8 +346,18 @@ function PlansPage() {
               <View>
                 <Text>{plan.title}</Text>
                 <Content>{plan.description}</Content>
+                <Content>Status: {plan.status}</Content>
               </View>
               <ButtonGroup>
+                <Button
+                  variant="secondary"
+                  onPress={() => {
+                    setEditingPlanId(plan.id);
+                    setForm({ title: plan.title, description: plan.description });
+                  }}
+                >
+                  Edit
+                </Button>
                 <Button variant="secondary" onPress={() => approvePlan.mutate(plan.id)}>Approve</Button>
                 <Button variant="secondary" onPress={() => archivePlan.mutate(plan.id)}>Archive</Button>
               </ButtonGroup>
@@ -316,28 +395,64 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
-    planId: undefined as string | undefined,
-    assignedAgentProfileId: undefined as string | undefined,
-    contextPackId: undefined as string | undefined,
+    planId: null as string | null,
+    assignedAgentProfileId: null as string | null,
+    contextPackId: null as string | null,
+    priority: "Medium" as TaskPriority,
   });
-
-  if (!projectId) return <EmptyState label="No project selected" />;
+  const [quickEdit, setQuickEdit] = useState<{
+    status: TaskStatus;
+    priority: TaskPriority;
+    assignedAgentProfileId: string | null;
+    contextPackId: string | null;
+  } | null>(null);
 
   const tasks = tasksQuery.data ?? [];
+  const plans = plansQuery.data ?? [];
+  const profiles = profilesQuery.data ?? [];
   const packs = packsQuery.data ?? [];
+  const planOptions = [{ id: "none", name: "No plan" }, ...plans.map((plan) => ({ id: plan.id, name: plan.title }))];
+  const profileOptions = [{ id: "none", name: "Unassigned" }, ...profiles.map((profile) => ({ id: profile.id, name: profile.name }))];
+  const packOptions = [{ id: "none", name: "No pack" }, ...packs.map((pack) => ({ id: pack.id, name: pack.name }))];
+  const statusOptions = taskStatuses.map((status) => ({ id: status, name: status }));
+  const priorityOptions = taskPriorities.map((priority) => ({ id: priority, name: priority }));
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const selectedPack = packs.find((pack) => pack.id === selectedTask?.contextPackId) ?? null;
+
+  useEffect(() => {
+    if (!selectedTask) {
+      setQuickEdit(null);
+      return;
+    }
+    setQuickEdit({
+      status: selectedTask.status,
+      priority: selectedTask.priority,
+      assignedAgentProfileId: selectedTask.assignedAgentProfileId ?? null,
+      contextPackId: selectedTask.contextPackId ?? null,
+    });
+  }, [selectedTask]);
+
+  if (!projectId) return <EmptyState label="No project selected" />;
 
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Tasks" />
       <SurfaceCard title="Create Task">
         <Form>
-          <TextField label="Title" value={form.title} onChange={(value) => setForm({ ...form, title: value })} />
-          <TextArea label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
-          <TextField label="Plan Id" value={form.planId ?? ""} onChange={(value) => setForm({ ...form, planId: value || undefined })} />
-          <TextField label="Assigned Agent Profile Id" value={form.assignedAgentProfileId ?? ""} onChange={(value) => setForm({ ...form, assignedAgentProfileId: value || undefined })} />
-          <TextField label="Context Pack Id" value={form.contextPackId ?? ""} onChange={(value) => setForm({ ...form, contextPackId: value || undefined })} />
+          <TextField name="task-title" label="Title" value={form.title} onChange={(value) => setForm({ ...form, title: value })} />
+          <TextArea name="task-description" label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
+          <Picker label="Plan" items={planOptions} selectedKey={form.planId ?? "none"} onSelectionChange={(key) => setForm({ ...form, planId: key === "none" ? null : String(key) })}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker label="Agent Profile" items={profileOptions} selectedKey={form.assignedAgentProfileId ?? "none"} onSelectionChange={(key) => setForm({ ...form, assignedAgentProfileId: key === "none" ? null : String(key) })}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker label="Context Pack" items={packOptions} selectedKey={form.contextPackId ?? "none"} onSelectionChange={(key) => setForm({ ...form, contextPackId: key === "none" ? null : String(key) })}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker label="Priority" items={priorityOptions} selectedKey={form.priority} onSelectionChange={(key) => setForm({ ...form, priority: String(key) as TaskPriority })}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
           <Button
             variant="accent"
             onPress={() =>
@@ -346,7 +461,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                 title: form.title,
                 description: form.description,
                 status: "Backlog",
-                priority: "Medium",
+                priority: form.priority,
                 planId: form.planId,
                 parentTaskId: null,
                 assignedAgentProfileId: form.assignedAgentProfileId,
@@ -392,7 +507,50 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                 <Content>Included Context Items: {selectedPack?.itemIds.length ?? 0}</Content>
                 <Content>Total Tokens: {selectedPack?.currentTokens ?? 0}</Content>
                 <Content>Budget Remaining: {selectedPack?.remainingTokens ?? 0}</Content>
+                {quickEdit ? (
+                  <Form>
+                    <Picker label="Status" items={statusOptions} selectedKey={quickEdit.status} onSelectionChange={(key) => setQuickEdit({ ...quickEdit, status: String(key) as TaskStatus })}>
+                      {(item) => <Item key={item.id}>{item.name}</Item>}
+                    </Picker>
+                    <Picker label="Priority" items={priorityOptions} selectedKey={quickEdit.priority} onSelectionChange={(key) => setQuickEdit({ ...quickEdit, priority: String(key) as TaskPriority })}>
+                      {(item) => <Item key={item.id}>{item.name}</Item>}
+                    </Picker>
+                    <Picker
+                      label="Assigned Agent"
+                      items={profileOptions}
+                      selectedKey={quickEdit.assignedAgentProfileId ?? "none"}
+                      onSelectionChange={(key) => setQuickEdit({ ...quickEdit, assignedAgentProfileId: key === "none" ? null : String(key) })}
+                    >
+                      {(item) => <Item key={item.id}>{item.name}</Item>}
+                    </Picker>
+                    <Picker
+                      label="Context Pack"
+                      items={packOptions}
+                      selectedKey={quickEdit.contextPackId ?? "none"}
+                      onSelectionChange={(key) => setQuickEdit({ ...quickEdit, contextPackId: key === "none" ? null : String(key) })}
+                    >
+                      {(item) => <Item key={item.id}>{item.name}</Item>}
+                    </Picker>
+                  </Form>
+                ) : null}
                 <ButtonGroup>
+                  <Button
+                    variant="secondary"
+                    onPress={() => {
+                      if (!quickEdit) return;
+                      updateTask.mutate({
+                        id: selectedTask.id,
+                        data: {
+                          status: quickEdit.status,
+                          priority: quickEdit.priority,
+                          assignedAgentProfileId: quickEdit.assignedAgentProfileId,
+                          contextPackId: quickEdit.contextPackId,
+                        },
+                      });
+                    }}
+                  >
+                    Save Quick Edit
+                  </Button>
                   <Button
                     variant="accent"
                     onPress={() => {
@@ -474,11 +632,21 @@ function ContextPage() {
     mutationFn: api.createContextPack,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-packs", projectId] }),
   });
+  const updatePack = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.updateContextPack>[1] }) => api.updateContextPack(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-packs", projectId] }),
+  });
+  const deletePack = useMutation({
+    mutationFn: api.deleteContextPack,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-packs", projectId] }),
+  });
   const duplicatePack = useMutation({
     mutationFn: api.duplicateContextPack,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["context-packs", projectId] }),
   });
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("All");
+  const [sortBy, setSortBy] = useState<string>("updated");
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [itemForm, setItemForm] = useState({
     title: "",
@@ -491,11 +659,25 @@ function ContextPage() {
     sourceReference: "manual",
   });
   const [packForm, setPackForm] = useState({ name: "", description: "", tokenBudget: 800 });
+  const [editingPackId, setEditingPackId] = useState<string | null>(null);
+  const typeFilterOptions = [{ id: "All", name: "All types" }, ...contextTypes.map((type) => ({ id: type, name: type }))];
+  const sortOptions = [
+    { id: "updated", name: "Last updated" },
+    { id: "title", name: "Title" },
+    { id: "tokens", name: "Token estimate" },
+  ];
 
   if (!projectId) return <EmptyState label="No project selected" />;
-  const filteredItems = (itemsQuery.data ?? []).filter((item) =>
-    `${item.title} ${item.summary} ${item.tags.join(" ")}`.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filteredItems = (itemsQuery.data ?? [])
+    .filter((item) =>
+      `${item.title} ${item.summary} ${item.tags.join(" ")}`.toLowerCase().includes(search.toLowerCase()),
+    )
+    .filter((item) => typeFilter === "All" || item.type === typeFilter)
+    .sort((left, right) => {
+      if (sortBy === "title") return left.title.localeCompare(right.title);
+      if (sortBy === "tokens") return right.tokenEstimate - left.tokenEstimate;
+      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    });
 
   return (
     <Flex direction="column" gap="size-250">
@@ -503,11 +685,11 @@ function ContextPage() {
       <Flex gap="size-200" wrap>
         <SurfaceCard title="Create Context Item">
           <Form>
-            <TextField label="Title" value={itemForm.title} onChange={(value) => setItemForm({ ...itemForm, title: value })} />
-            <TextField label="Summary" value={itemForm.summary} onChange={(value) => setItemForm({ ...itemForm, summary: value })} />
-            <TextArea label="Content" value={itemForm.content} onChange={(value) => setItemForm({ ...itemForm, content: value })} />
-            <TextField label="Type" value={itemForm.type} onChange={(value) => setItemForm({ ...itemForm, type: value })} />
-            <TextField label="Tags" value={itemForm.tags} onChange={(value) => setItemForm({ ...itemForm, tags: value })} />
+            <TextField name="context-title" label="Title" value={itemForm.title} onChange={(value) => setItemForm({ ...itemForm, title: value })} />
+            <TextField name="context-summary" label="Summary" value={itemForm.summary} onChange={(value) => setItemForm({ ...itemForm, summary: value })} />
+            <TextArea name="context-content" label="Content" value={itemForm.content} onChange={(value) => setItemForm({ ...itemForm, content: value })} />
+            <TextField name="context-type" label="Type" value={itemForm.type} onChange={(value) => setItemForm({ ...itemForm, type: value })} />
+            <TextField name="context-tags" label="Tags" value={itemForm.tags} onChange={(value) => setItemForm({ ...itemForm, tags: value })} />
             <Button
               variant="accent"
               onPress={() =>
@@ -528,11 +710,12 @@ function ContextPage() {
             </Button>
           </Form>
         </SurfaceCard>
-        <SurfaceCard title="Build Context Pack">
+        <SurfaceCard title={editingPackId ? "Edit Context Pack" : "Build Context Pack"}>
           <Form>
-            <TextField label="Name" value={packForm.name} onChange={(value) => setPackForm({ ...packForm, name: value })} />
-            <TextArea label="Description" value={packForm.description} onChange={(value) => setPackForm({ ...packForm, description: value })} />
+            <TextField name="pack-name" label="Name" value={packForm.name} onChange={(value) => setPackForm({ ...packForm, name: value })} />
+            <TextArea name="pack-description" label="Description" value={packForm.description} onChange={(value) => setPackForm({ ...packForm, description: value })} />
             <TextField
+              name="pack-token-budget"
               label="Token Budget"
               type="number"
               value={String(packForm.tokenBudget)}
@@ -540,23 +723,39 @@ function ContextPage() {
             />
             <Button
               variant="accent"
-              onPress={() =>
-                createPack.mutate({
+              onPress={() => {
+                const payload = {
                   projectId,
                   name: packForm.name,
                   description: packForm.description,
                   tokenBudget: packForm.tokenBudget,
                   itemIds: selectedItemIds,
-                })
-              }
+                };
+                if (editingPackId) {
+                  updatePack.mutate({ id: editingPackId, data: payload });
+                } else {
+                  createPack.mutate(payload);
+                }
+                setEditingPackId(null);
+                setPackForm({ name: "", description: "", tokenBudget: 800 });
+                setSelectedItemIds([]);
+              }}
             >
-              Create Pack
+              {editingPackId ? "Save Pack" : "Create Pack"}
             </Button>
           </Form>
         </SurfaceCard>
       </Flex>
       <SurfaceCard title="Context Library" description="Search, filter, tag, and sort reusable context.">
-        <SearchField aria-label="Search context" value={search} onChange={setSearch} />
+        <Flex gap="size-150" wrap marginBottom="size-150">
+          <SearchField aria-label="Search context" value={search} onChange={setSearch} />
+          <Picker label="Type Filter" items={typeFilterOptions} selectedKey={typeFilter} onSelectionChange={(key) => setTypeFilter(String(key))}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker label="Sort By" items={sortOptions} selectedKey={sortBy} onSelectionChange={(key) => setSortBy(String(key))}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+        </Flex>
         <TableView aria-label="Context library" selectionMode="multiple" selectedKeys={selectedItemIds} onSelectionChange={(keys) => setSelectedItemIds(Array.from(keys).map(String))}>
           <TableHeader>
             <Column key="title">Title</Column>
@@ -596,7 +795,17 @@ function ContextPage() {
           <View flex>
             <Heading level={4}>Selected Context Packs</Heading>
             {(packsQuery.data ?? []).map((pack) => (
-              <PackCard key={pack.id} pack={pack} onDuplicate={() => duplicatePack.mutate(pack.id)} />
+              <PackCard
+                key={pack.id}
+                pack={pack}
+                onDuplicate={() => duplicatePack.mutate(pack.id)}
+                onDelete={() => deletePack.mutate(pack.id)}
+                onEdit={() => {
+                  setEditingPackId(pack.id);
+                  setPackForm({ name: pack.name, description: pack.description, tokenBudget: pack.tokenBudget });
+                  setSelectedItemIds(pack.itemIds);
+                }}
+              />
             ))}
           </View>
         </Flex>
@@ -605,7 +814,7 @@ function ContextPage() {
   );
 }
 
-function PackCard(props: { pack: ContextPackDto; onDuplicate: () => void }) {
+function PackCard(props: { pack: ContextPackDto; onDuplicate: () => void; onDelete: () => void; onEdit: () => void }) {
   return (
     <Well marginBottom="size-150">
       <Flex direction="column" gap="size-100">
@@ -614,8 +823,11 @@ function PackCard(props: { pack: ContextPackDto; onDuplicate: () => void }) {
         <Content>Token Budget: {props.pack.tokenBudget}</Content>
         <Content>Current Tokens: {props.pack.currentTokens}</Content>
         <Content>Remaining Tokens: {props.pack.remainingTokens}</Content>
+        <Content>Items in Pack: {props.pack.itemIds.length}</Content>
         <ButtonGroup>
+          <Button variant="secondary" onPress={props.onEdit}>Edit</Button>
           <Button variant="secondary" onPress={props.onDuplicate}>Duplicate</Button>
+          <Button variant="secondary" onPress={props.onDelete}>Delete</Button>
         </ButtonGroup>
       </Flex>
     </Well>
@@ -631,7 +843,7 @@ function AgentRunsPage() {
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Agent Runs" />
-      {(runsQuery.data ?? []).map((run) => (
+      {(runsQuery.data ?? []).map((run: AgentRunWithDiffDto) => (
         <SurfaceCard key={run.id} title={run.status}>
           <Content>Prompt</Content>
           <Well marginBottom="size-150">{run.prompt}</Well>
@@ -648,6 +860,14 @@ function AgentRunsPage() {
           </Content>
           <Content>Context Items</Content>
           <Content>{run.contextSnapshot.map((item) => item.title).join(", ")}</Content>
+          {run.contextDiff ? (
+            <>
+              <Content marginTop="size-150">Context Diff</Content>
+              <Content>Added: {run.contextDiff.added.map((item) => item.title).join(", ") || "None"}</Content>
+              <Content>Removed: {run.contextDiff.removed.map((item) => item.title).join(", ") || "None"}</Content>
+              <Content>Modified: {run.contextDiff.modified.map((item) => item.title).join(", ") || "None"}</Content>
+            </>
+          ) : null}
         </SurfaceCard>
       ))}
     </Flex>

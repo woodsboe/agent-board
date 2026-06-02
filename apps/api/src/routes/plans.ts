@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createPlanInputSchema } from "@agentboard/shared";
+import { createPlanInputSchema, updatePlanInputSchema } from "@agentboard/shared";
 import { mapPlan } from "../lib/mappers";
 
 export async function planRoutes(app: FastifyInstance) {
@@ -16,6 +16,13 @@ export async function planRoutes(app: FastifyInstance) {
     const input = createPlanInputSchema.parse(request.body);
     const plan = await app.prisma.plan.create({ data: input });
     reply.code(201);
+    return mapPlan(plan);
+  });
+
+  app.patch("/plans/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const input = updatePlanInputSchema.parse(request.body);
+    const plan = await app.prisma.plan.update({ where: { id }, data: input });
     return mapPlan(plan);
   });
 
