@@ -4,6 +4,10 @@ import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: "jsdom",
+    setupFiles: "./src/test-setup.ts",
+  },
   resolve: {
     alias: {
       "@agentboard/ui": fileURLToPath(new URL("../../packages/ui/src/index.tsx", import.meta.url)),

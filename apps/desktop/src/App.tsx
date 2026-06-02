@@ -38,6 +38,7 @@ import type { AgentRunWithDiffDto, ContextItemDto, ContextPackDto, PlanDto, Proj
 import { SurfaceCard, SectionHeader } from "@agentboard/ui";
 import { api } from "./api";
 import { useAppStore } from "./store";
+import { canDropLiftedTask, toggleLiftedTask } from "./task-move-mode";
 import { nextStatus, previousStatus } from "./task-status";
 import { buildTaskRunSummary, type TaskRunSummary } from "./task-run-summary";
 
@@ -447,6 +448,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   } | null>(null);
   const [taskSearch, setTaskSearch] = useState("");
   const [boardPriorityFilter, setBoardPriorityFilter] = useState<string>("All");
+  const [liftedTaskId, setLiftedTaskId] = useState<string | null>(null);
 
   const tasks = tasksQuery.data ?? [];
   const plans = plansQuery.data ?? [];
@@ -461,6 +463,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   const priorityOptions = taskPriorities.map((priority) => ({ id: priority, name: priority }));
   const detailPanelWidthValue = detailPanelWidth === "wide" ? 480 : 400;
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+  const liftedTask = tasks.find((task) => task.id === liftedTaskId) ?? null;
   const selectedPack = packs.find((pack) => pack.id === selectedTask?.contextPackId) ?? null;
   const selectedContextItems = selectedPack ? contextItems.filter((item) => selectedPack.itemIds.includes(item.id)) : [];
   const selectedTaskRuns = selectedTask
@@ -546,6 +549,11 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
     resetTaskForm();
   }
 
+  function moveTaskToStatus(taskId: string, status: TaskStatus) {
+    updateTask.mutate({ id: taskId, data: { status } });
+    setLiftedTaskId((current) => (current === taskId ? null : current));
+  }
+
   if (!projectId) return <EmptyState label="No project selected" />;
 
   return (
@@ -594,6 +602,8 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
             {(item) => <Item key={item.id}>{item.name}</Item>}
           </Picker>
           <Content>Visible tasks: {filteredTasks.length}</Content>
+          {liftedTask ? <Content>Move Mode: {liftedTask.title} is ready to move. Use a lane drop button or press M on the active card to cancel.</Content> : null}
+          {liftedTask ? <Button variant="secondary" onPress={() => setLiftedTaskId(null)}>Cancel Move Mode</Button> : null}
         </Flex>
       </SurfaceCard>
       <Flex gap="size-200" alignItems="start">
@@ -607,11 +617,15 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
               agentLabels={Object.fromEntries(profiles.map((profile) => [profile.id, profile.name]))}
               packLabels={Object.fromEntries(packs.map((pack) => [pack.id, pack.name]))}
               runSummary={taskRunSummary}
+              liftedTaskId={liftedTaskId}
+              liftedTaskStatus={liftedTask?.status ?? null}
               onDropTask={(taskId) => updateTask.mutate({ id: taskId, data: { status } })}
               onSelectTask={props.onSelectTask}
               onEditTask={startEditingTask}
               onQuickUpdate={(taskId, data) => updateTask.mutate({ id: taskId, data })}
-              onMove={(taskId, nextStatus) => updateTask.mutate({ id: taskId, data: { status: nextStatus } })}
+              onLiftTask={setLiftedTaskId}
+              onDropLiftedTask={(taskId) => moveTaskToStatus(taskId, status)}
+              onMove={moveTaskToStatus}
               onDeleteTask={(taskId) => deleteTask.mutate(taskId)}
               onRun={(task) => {
                 if (!task.assignedAgentProfileId) return;
@@ -745,20 +759,26 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   );
 }
 
-function KanbanColumn(props: {
+export function KanbanColumn(props: {
   status: TaskStatus;
   tasks: TaskDto[];
   agentLabels: Record<string, string>;
   packLabels: Record<string, string>;
   runSummary: Record<string, TaskRunSummary>;
+  liftedTaskId: string | null;
+  liftedTaskStatus: TaskStatus | null;
   onDropTask: (taskId: string) => void;
   onSelectTask: (taskId: string | null) => void;
   onEditTask: (task: TaskDto) => void;
   onQuickUpdate: (taskId: string, data: Partial<TaskDto>) => void;
+  onLiftTask: (taskId: string | null) => void;
+  onDropLiftedTask: (taskId: string) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
   onRun: (task: TaskDto) => void;
 }) {
+  const showDropTarget = canDropLiftedTask(props.liftedTaskId, props.liftedTaskStatus, props.status);
+
   return (
     <div
       className="glass-panel kanban-column"
@@ -771,13 +791,19 @@ function KanbanColumn(props: {
     >
       <Heading level={4}>{props.status}</Heading>
       <Content marginBottom="size-100">{props.tasks.length} task{props.tasks.length === 1 ? "" : "s"}</Content>
+      {showDropTarget ? (
+        <Button variant="secondary" marginBottom="size-100" onPress={() => props.onDropLiftedTask(props.liftedTaskId!)}>
+          Drop Here
+        </Button>
+      ) : null}
       <Flex direction="column" gap="size-150">
         {props.tasks.map((task) => {
           const runSummary = props.runSummary[task.id];
+          const isLifted = props.liftedTaskId === task.id;
           return (
             <div
               key={task.id}
-              className="task-card"
+              className={`task-card${isLifted ? " task-card-lifted" : ""}`}
               draggable
               onDragStart={(event: DragEvent<HTMLDivElement>) => event.dataTransfer.setData("text/task-id", task.id)}
               onKeyDown={(event) => {
@@ -797,6 +823,10 @@ function KanbanColumn(props: {
                   event.preventDefault();
                   props.onRun(task);
                 }
+                if (event.key.toLowerCase() === "m") {
+                  event.preventDefault();
+                  props.onLiftTask(toggleLiftedTask(props.liftedTaskId, task.id));
+                }
               }}
               role="group"
               tabIndex={0}
@@ -815,6 +845,7 @@ function KanbanColumn(props: {
                         if (key === "detail") props.onSelectTask(task.id);
                         if (key === "run") props.onRun(task);
                         if (key === "edit") props.onEditTask(task);
+                        if (key === "lift") props.onLiftTask(toggleLiftedTask(props.liftedTaskId, task.id));
                         if (key === "left") props.onMove(task.id, previousStatus(task.status));
                         if (key === "right") props.onMove(task.id, nextStatus(task.status));
                         if (key === "delete") props.onDeleteTask(task.id);
@@ -823,6 +854,7 @@ function KanbanColumn(props: {
                       <Item key="detail">Open Details</Item>
                       <Item key="run">Run Agent</Item>
                       <Item key="edit">Edit Task</Item>
+                      <Item key="lift">{isLifted ? "Cancel Move Mode" : "Pick Up Task"}</Item>
                       <Item key="left">Move Left</Item>
                       <Item key="right">Move Right</Item>
                       <Item key="delete">Delete Task</Item>
@@ -841,6 +873,7 @@ function KanbanColumn(props: {
                   <Content>
                     Latest Run: {runSummary?.latestRun?.status ?? "No runs"} • Cost: ${runSummary?.totalCost ?? 0}
                   </Content>
+                  {isLifted ? <Content>This task is in move mode. Choose a different lane drop button or press M again to cancel.</Content> : null}
                   <Flex gap="size-100" wrap alignItems="end">
                     <Picker
                       aria-label={`Status for ${task.title}`}
@@ -863,6 +896,7 @@ function KanbanColumn(props: {
                     <ActionButton onPress={() => props.onSelectTask(task.id)}>Detail</ActionButton>
                     <ActionButton onPress={() => props.onEditTask(task)}>Edit</ActionButton>
                     <ActionButton onPress={() => props.onRun(task)}>Run Agent</ActionButton>
+                    <ActionButton onPress={() => props.onLiftTask(toggleLiftedTask(props.liftedTaskId, task.id))}>{isLifted ? "Cancel Move" : "Pick Up"}</ActionButton>
                     <ActionButton onPress={() => props.onMove(task.id, previousStatus(task.status))}>Left</ActionButton>
                     <ActionButton onPress={() => props.onMove(task.id, nextStatus(task.status))}>Right</ActionButton>
                   </ButtonGroup>
