@@ -43,7 +43,17 @@ import { nextStatus, previousStatus } from "./task-status";
 function Shell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { activeProjectId, setActiveProjectId, commandPaletteOpen, setCommandPaletteOpen, selectedTaskId, setSelectedTaskId } = useAppStore();
+  const {
+    activeProjectId,
+    setActiveProjectId,
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+    selectedTaskId,
+    setSelectedTaskId,
+    themeMode,
+    boardDensity,
+    sidebarWidth,
+  } = useAppStore();
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: api.getProjects });
 
   useEffect(() => {
@@ -62,6 +72,13 @@ function Shell() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [setCommandPaletteOpen]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    document.documentElement.dataset.boardDensity = boardDensity;
+  }, [boardDensity, themeMode]);
+
+  const sidebarWidthValue = sidebarWidth === "narrow" ? 240 : sidebarWidth === "wide" ? 360 : 300;
 
   const commands = [
     { id: "create-task", label: "Create Task", run: () => navigate("/tasks") },
@@ -96,7 +113,14 @@ function Shell() {
   return (
     <Flex direction="column" height="100%" UNSAFE_className="app-shell">
       <Flex gap="size-200" height="100%">
-        <View width="size-3000" padding="size-250" borderEndWidth="thin" borderColor="dark" UNSAFE_className="glass-panel sidebar-panel">
+        <View
+          width={sidebarWidthValue}
+          minWidth={sidebarWidthValue}
+          padding="size-250"
+          borderEndWidth="thin"
+          borderColor="dark"
+          UNSAFE_className="glass-panel sidebar-panel"
+        >
           <Heading level={2}>AgentBoard</Heading>
           <Content marginBottom="size-250">Local-first operating system for agentic software projects.</Content>
           <Flex direction="column" gap="size-100" marginTop="size-150">
@@ -168,6 +192,8 @@ function DashboardPage() {
   });
 
   if (!projectId) return <EmptyState label="No project selected" />;
+
+  const activeProjectId = projectId;
   if (dashboardQuery.isLoading) return <ProgressCircle aria-label="Loading dashboard" isIndeterminate />;
   const data = dashboardQuery.data!;
 
@@ -373,11 +399,14 @@ function PlansPage() {
 function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   const projectId = useAppStore((state) => state.activeProjectId);
   const selectedTaskId = useAppStore((state) => state.selectedTaskId);
+  const detailPanelWidth = useAppStore((state) => state.detailPanelWidth);
   const queryClient = useQueryClient();
   const tasksQuery = useQuery({ queryKey: ["tasks", projectId], queryFn: () => api.getTasks(projectId!), enabled: Boolean(projectId) });
   const plansQuery = useQuery({ queryKey: ["plans", projectId], queryFn: () => api.getPlans(projectId!), enabled: Boolean(projectId) });
   const profilesQuery = useQuery({ queryKey: ["agent-profiles"], queryFn: api.getAgentProfiles });
   const packsQuery = useQuery({ queryKey: ["context-packs", projectId], queryFn: () => api.getContextPacks(projectId!), enabled: Boolean(projectId) });
+  const itemsQuery = useQuery({ queryKey: ["context-items", projectId], queryFn: () => api.getContextItems(projectId!), enabled: Boolean(projectId) });
+  const runsQuery = useQuery({ queryKey: ["agent-runs", projectId], queryFn: () => api.getAgentRuns(projectId!), enabled: Boolean(projectId) });
   const createTask = useMutation({
     mutationFn: api.createTask,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
@@ -408,6 +437,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
     contextPackId: null as string | null,
     priority: "Medium" as TaskPriority,
   });
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [quickEdit, setQuickEdit] = useState<{
     status: TaskStatus;
     priority: TaskPriority;
@@ -421,13 +451,23 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   const plans = plansQuery.data ?? [];
   const profiles = profilesQuery.data ?? [];
   const packs = packsQuery.data ?? [];
+  const contextItems = itemsQuery.data ?? [];
+  const agentRuns = runsQuery.data ?? [];
   const planOptions = [{ id: "none", name: "No plan" }, ...plans.map((plan) => ({ id: plan.id, name: plan.title }))];
   const profileOptions = [{ id: "none", name: "Unassigned" }, ...profiles.map((profile) => ({ id: profile.id, name: profile.name }))];
   const packOptions = [{ id: "none", name: "No pack" }, ...packs.map((pack) => ({ id: pack.id, name: pack.name }))];
   const statusOptions = taskStatuses.map((status) => ({ id: status, name: status }));
   const priorityOptions = taskPriorities.map((priority) => ({ id: priority, name: priority }));
+  const detailPanelWidthValue = detailPanelWidth === "wide" ? 480 : 400;
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const selectedPack = packs.find((pack) => pack.id === selectedTask?.contextPackId) ?? null;
+  const selectedContextItems = selectedPack ? contextItems.filter((item) => selectedPack.itemIds.includes(item.id)) : [];
+  const selectedTaskRuns = selectedTask
+    ? [...agentRuns]
+        .filter((run) => run.taskId === selectedTask.id)
+        .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime())
+        .slice(0, 5)
+    : [];
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = `${task.title} ${task.description}`.toLowerCase().includes(taskSearch.toLowerCase());
     const matchesPriority = boardPriorityFilter === "All" || task.priority === boardPriorityFilter;
@@ -447,12 +487,68 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
     });
   }, [selectedTask]);
 
+  function resetTaskForm() {
+    setEditingTaskId(null);
+    setForm({
+      title: "",
+      description: "",
+      planId: null,
+      assignedAgentProfileId: null,
+      contextPackId: null,
+      priority: "Medium",
+    });
+  }
+
+  function startEditingTask(task: TaskDto) {
+    setEditingTaskId(task.id);
+    setForm({
+      title: task.title,
+      description: task.description,
+      planId: task.planId ?? null,
+      assignedAgentProfileId: task.assignedAgentProfileId ?? null,
+      contextPackId: task.contextPackId ?? null,
+      priority: task.priority,
+    });
+    props.onSelectTask(task.id);
+  }
+
+  function submitTaskForm() {
+    const payload = {
+      projectId: projectId!,
+      title: form.title,
+      description: form.description,
+      priority: form.priority,
+      planId: form.planId,
+      parentTaskId: null,
+      assignedAgentProfileId: form.assignedAgentProfileId,
+      contextPackId: form.contextPackId,
+    };
+
+    if (editingTaskId) {
+      const existingTask = tasks.find((task) => task.id === editingTaskId);
+      updateTask.mutate({
+        id: editingTaskId,
+        data: {
+          ...payload,
+          status: existingTask?.status ?? "Backlog",
+        },
+      });
+    } else {
+      createTask.mutate({
+        ...payload,
+        status: "Backlog",
+      });
+    }
+
+    resetTaskForm();
+  }
+
   if (!projectId) return <EmptyState label="No project selected" />;
 
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Tasks" />
-      <SurfaceCard title="Create Task">
+      <SurfaceCard title={editingTaskId ? "Edit Task" : "Create Task"}>
         <Form>
           <TextField name="task-title" label="Title" value={form.title} onChange={(value) => setForm({ ...form, title: value })} />
           <TextArea name="task-description" label="Description" value={form.description} onChange={(value) => setForm({ ...form, description: value })} />
@@ -468,25 +564,17 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
           <Picker label="Priority" items={priorityOptions} selectedKey={form.priority} onSelectionChange={(key) => setForm({ ...form, priority: String(key) as TaskPriority })}>
             {(item) => <Item key={item.id}>{item.name}</Item>}
           </Picker>
-          <Button
-            variant="accent"
-            onPress={() =>
-              createTask.mutate({
-                projectId,
-                title: form.title,
-                description: form.description,
-                status: "Backlog",
-                priority: form.priority,
-                planId: form.planId,
-                parentTaskId: null,
-                assignedAgentProfileId: form.assignedAgentProfileId,
-                contextPackId: form.contextPackId,
-              })
-            }
-          >
-            Create Task
-          </Button>
         </Form>
+        <Flex gap="size-100" wrap marginTop="size-150">
+          <Button variant="accent" onPress={submitTaskForm}>
+            {editingTaskId ? "Save Task" : "Create Task"}
+          </Button>
+          {editingTaskId ? (
+            <Button variant="secondary" onPress={resetTaskForm}>
+              Cancel Edit
+            </Button>
+          ) : null}
+        </Flex>
         <Content marginTop="size-100">Plans: {(plansQuery.data ?? []).map((item) => item.title).join(", ")}</Content>
         <Content>Profiles: {(profilesQuery.data ?? []).map((item) => item.name).join(", ")}</Content>
         <Content>Packs: {(packsQuery.data ?? []).map((item) => item.name).join(", ")}</Content>
@@ -517,6 +605,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
               packLabels={Object.fromEntries(packs.map((pack) => [pack.id, pack.name]))}
               onDropTask={(taskId) => updateTask.mutate({ id: taskId, data: { status } })}
               onSelectTask={props.onSelectTask}
+              onEditTask={startEditingTask}
               onMove={(taskId, nextStatus) => updateTask.mutate({ id: taskId, data: { status: nextStatus } })}
               onDeleteTask={(taskId) => deleteTask.mutate(taskId)}
               onRun={(task) => {
@@ -527,7 +616,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
           ))}
         </Flex>
         </View>
-        <View width="size-3400" minWidth="size-3400" UNSAFE_className="detail-panel">
+        <View width={detailPanelWidthValue} minWidth={detailPanelWidthValue} UNSAFE_className="detail-panel">
           <SurfaceCard title="Task Detail Drawer" description="Selected task, context preview, and execution entry point.">
             {selectedTask ? (
               <Flex direction="column" gap="size-100">
@@ -535,10 +624,28 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                 <Content>{selectedTask.description}</Content>
                 <Content>Status: {selectedTask.status}</Content>
                 <Content>Priority: {selectedTask.priority}</Content>
+                <Content>Plan: {plans.find((plan) => plan.id === selectedTask.planId)?.title ?? "No plan"}</Content>
                 <Content>Context Pack: {selectedPack?.name ?? "None"}</Content>
                 <Content>Included Context Items: {selectedPack?.itemIds.length ?? 0}</Content>
                 <Content>Total Tokens: {selectedPack?.currentTokens ?? 0}</Content>
                 <Content>Budget Remaining: {selectedPack?.remainingTokens ?? 0}</Content>
+                <Divider size="S" marginY="size-100" />
+                <Heading level={5}>Context Preview</Heading>
+                {selectedContextItems.length ? (
+                  <Flex direction="column" gap="size-100">
+                    {selectedContextItems.map((item) => (
+                      <Well key={item.id}>
+                        <Flex direction="column" gap="size-50">
+                          <Text>{item.title}</Text>
+                          <Content>{item.type} • {item.tokenEstimate} tokens</Content>
+                          <Content>{item.summary}</Content>
+                        </Flex>
+                      </Well>
+                    ))}
+                  </Flex>
+                ) : (
+                  <Content>No context items are attached to this task yet.</Content>
+                )}
                 {quickEdit ? (
                   <Form>
                     <Picker label="Status" items={statusOptions} selectedKey={quickEdit.status} onSelectionChange={(key) => setQuickEdit({ ...quickEdit, status: String(key) as TaskStatus })}>
@@ -565,7 +672,28 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                     </Picker>
                   </Form>
                 ) : null}
+                <Divider size="S" marginY="size-100" />
+                <Heading level={5}>Recent Agent Runs</Heading>
+                {selectedTaskRuns.length ? (
+                  <Flex direction="column" gap="size-100">
+                    {selectedTaskRuns.map((run) => (
+                      <Well key={run.id}>
+                        <Flex direction="column" gap="size-50">
+                          <Text>{run.status}</Text>
+                          <Content>{new Date(run.startedAt).toLocaleString()}</Content>
+                          <Content>
+                            Tokens: {run.tokenUsage?.totalTokens ?? 0} • Cost: ${run.tokenUsage?.estimatedCost ?? 0}
+                          </Content>
+                          <Content>{run.output}</Content>
+                        </Flex>
+                      </Well>
+                    ))}
+                  </Flex>
+                ) : (
+                  <Content>No agent runs recorded for this task yet.</Content>
+                )}
                 <ButtonGroup>
+                  <Button variant="secondary" onPress={() => startEditingTask(selectedTask)}>Edit Task</Button>
                   <Button
                     variant="secondary"
                     onPress={() => {
@@ -613,6 +741,7 @@ function KanbanColumn(props: {
   packLabels: Record<string, string>;
   onDropTask: (taskId: string) => void;
   onSelectTask: (taskId: string | null) => void;
+  onEditTask: (task: TaskDto) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => void;
   onDeleteTask: (taskId: string) => void;
   onRun: (task: TaskDto) => void;
@@ -628,6 +757,7 @@ function KanbanColumn(props: {
       }}
     >
       <Heading level={4}>{props.status}</Heading>
+      <Content marginBottom="size-100">{props.tasks.length} task{props.tasks.length === 1 ? "" : "s"}</Content>
       <Flex direction="column" gap="size-150">
         {props.tasks.map((task) => (
           <div
@@ -669,6 +799,7 @@ function KanbanColumn(props: {
                     onAction={(key) => {
                       if (key === "detail") props.onSelectTask(task.id);
                       if (key === "run") props.onRun(task);
+                      if (key === "edit") props.onEditTask(task);
                       if (key === "left") props.onMove(task.id, previousStatus(task.status));
                       if (key === "right") props.onMove(task.id, nextStatus(task.status));
                       if (key === "delete") props.onDeleteTask(task.id);
@@ -676,6 +807,7 @@ function KanbanColumn(props: {
                   >
                     <Item key="detail">Open Details</Item>
                     <Item key="run">Run Agent</Item>
+                    <Item key="edit">Edit Task</Item>
                     <Item key="left">Move Left</Item>
                     <Item key="right">Move Right</Item>
                     <Item key="delete">Delete Task</Item>
@@ -690,6 +822,7 @@ function KanbanColumn(props: {
                 </Content>
                 <ButtonGroup>
                   <ActionButton onPress={() => props.onSelectTask(task.id)}>Detail</ActionButton>
+                  <ActionButton onPress={() => props.onEditTask(task)}>Edit</ActionButton>
                   <ActionButton onPress={() => props.onRun(task)}>Run Agent</ActionButton>
                   <ActionButton onPress={() => props.onMove(task.id, previousStatus(task.status))}>Left</ActionButton>
                   <ActionButton onPress={() => props.onMove(task.id, nextStatus(task.status))}>Right</ActionButton>
@@ -698,6 +831,7 @@ function KanbanColumn(props: {
             </Well>
           </div>
         ))}
+        {!props.tasks.length ? <Content>No tasks in this lane right now.</Content> : null}
       </Flex>
     </div>
   );
@@ -1085,11 +1219,53 @@ function GitPage() {
 }
 
 function SettingsPage() {
+  const {
+    themeMode,
+    setThemeMode,
+    boardDensity,
+    setBoardDensity,
+    sidebarWidth,
+    setSidebarWidth,
+    detailPanelWidth,
+    setDetailPanelWidth,
+  } = useAppStore();
+
   return (
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Settings" />
       <SurfaceCard title="Environment">
         <Content>Local-first mode only. No authentication or SaaS sync configured in V1.</Content>
+      </SurfaceCard>
+      <SurfaceCard title="Workspace Preferences" description="Persisted locally for this machine and browser profile.">
+        <Form>
+          <Picker label="Theme" items={[{ id: "dark", name: "Dark" }, { id: "light", name: "Light" }]} selectedKey={themeMode} onSelectionChange={(key) => setThemeMode(String(key) as "dark" | "light")}>
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker
+            label="Board Density"
+            items={[{ id: "comfortable", name: "Comfortable" }, { id: "compact", name: "Compact" }]}
+            selectedKey={boardDensity}
+            onSelectionChange={(key) => setBoardDensity(String(key) as "comfortable" | "compact")}
+          >
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker
+            label="Sidebar Width"
+            items={[{ id: "narrow", name: "Narrow" }, { id: "standard", name: "Standard" }, { id: "wide", name: "Wide" }]}
+            selectedKey={sidebarWidth}
+            onSelectionChange={(key) => setSidebarWidth(String(key) as "narrow" | "standard" | "wide")}
+          >
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Picker
+            label="Task Detail Width"
+            items={[{ id: "standard", name: "Standard" }, { id: "wide", name: "Wide" }]}
+            selectedKey={detailPanelWidth}
+            onSelectionChange={(key) => setDetailPanelWidth(String(key) as "standard" | "wide")}
+          >
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+        </Form>
       </SurfaceCard>
     </Flex>
   );

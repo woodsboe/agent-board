@@ -3,6 +3,15 @@
   --app-bg: linear-gradient(135deg, #10151f 0%, #172233 50%, #0c1118 100%);
   --panel-bg: rgba(20, 27, 39, 0.78);
   --panel-border: rgba(167, 187, 226, 0.18);
+  --panel-text: #f3f6fb;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app-bg: linear-gradient(135deg, #eef5ff 0%, #dfe8f6 45%, #f8fbff 100%);
+  --panel-bg: rgba(255, 255, 255, 0.84);
+  --panel-border: rgba(69, 91, 135, 0.16);
+  --panel-text: #162033;
 }
 
 html,
@@ -15,6 +24,7 @@ body,
 body {
   background: var(--app-bg);
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: var(--panel-text);
 }
 
 .app-shell {
@@ -40,6 +50,14 @@ body {
 .task-card {
   cursor: grab;
   outline: none;
+}
+
+:root[data-board-density="compact"] .task-card .spectrum-Well {
+  padding: 10px;
+}
+
+:root[data-board-density="compact"] .task-card .spectrum-ButtonGroup {
+  gap: 4px;
 }
 
 .task-card:focus-visible {
