@@ -42,36 +42,3 @@ body {
   resize: horizontal;
   overflow: auto;
 }
-
-.kanban-column {
-  min-width: 280px;
-}
-
-.task-card {
-  cursor: grab;
-  outline: none;
-}
-
-.task-card-lifted .spectrum-Well {
-  border: 1px solid rgba(132, 197, 255, 0.75);
-  box-shadow: 0 0 0 2px rgba(132, 197, 255, 0.25);
-}
-
-:root[data-board-density="compact"] .task-card .spectrum-Well {
-  padding: 10px;
-}
-
-:root[data-board-density="compact"] .task-card .spectrum-ButtonGroup {
-  gap: 4px;
-}
-
-.task-card:focus-visible {
-  box-shadow: 0 0 0 2px rgba(132, 197, 255, 0.75);
-  border-radius: 14px;
-}
-
-.detail-panel {
-  resize: horizontal;
-  overflow: auto;
-  min-width: 320px;
-}

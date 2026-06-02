@@ -4,6 +4,21 @@ import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@tanstack/react-query")) {
+            return "react-query";
+          }
+          if (id.includes("react-router") || id.includes("@remix-run/router")) {
+            return "router";
+          }
+        },
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: "./src/test-setup.ts",
