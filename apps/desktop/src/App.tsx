@@ -386,6 +386,13 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
     mutationFn: ({ id, data }: { id: string; data: Partial<TaskDto> }) => api.updateTask(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", projectId] }),
   });
+  const deleteTask = useMutation({
+    mutationFn: api.deleteTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
+      props.onSelectTask(null);
+    },
+  });
   const runAgent = useMutation({
     mutationFn: api.runAgent,
     onSuccess: () => {
@@ -407,6 +414,8 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
     assignedAgentProfileId: string | null;
     contextPackId: string | null;
   } | null>(null);
+  const [taskSearch, setTaskSearch] = useState("");
+  const [boardPriorityFilter, setBoardPriorityFilter] = useState<string>("All");
 
   const tasks = tasksQuery.data ?? [];
   const plans = plansQuery.data ?? [];
@@ -419,6 +428,11 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
   const priorityOptions = taskPriorities.map((priority) => ({ id: priority, name: priority }));
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
   const selectedPack = packs.find((pack) => pack.id === selectedTask?.contextPackId) ?? null;
+  const filteredTasks = tasks.filter((task) => {
+    const matchesSearch = `${task.title} ${task.description}`.toLowerCase().includes(taskSearch.toLowerCase());
+    const matchesPriority = boardPriorityFilter === "All" || task.priority === boardPriorityFilter;
+    return matchesSearch && matchesPriority;
+  });
 
   useEffect(() => {
     if (!selectedTask) {
@@ -477,6 +491,20 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
         <Content>Profiles: {(profilesQuery.data ?? []).map((item) => item.name).join(", ")}</Content>
         <Content>Packs: {(packsQuery.data ?? []).map((item) => item.name).join(", ")}</Content>
       </SurfaceCard>
+      <SurfaceCard title="Board Controls" description="Filter the board and manage task flow faster.">
+        <Flex gap="size-150" wrap alignItems="end">
+          <SearchField aria-label="Search tasks" value={taskSearch} onChange={setTaskSearch} />
+          <Picker
+            label="Priority Filter"
+            items={[{ id: "All", name: "All priorities" }, ...priorityOptions]}
+            selectedKey={boardPriorityFilter}
+            onSelectionChange={(key) => setBoardPriorityFilter(String(key))}
+          >
+            {(item) => <Item key={item.id}>{item.name}</Item>}
+          </Picker>
+          <Content>Visible tasks: {filteredTasks.length}</Content>
+        </Flex>
+      </SurfaceCard>
       <Flex gap="size-200" alignItems="start">
         <View flex overflow="auto">
         <Flex gap="size-200">
@@ -484,12 +512,13 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
             <KanbanColumn
               key={status}
               status={status}
-              tasks={tasks.filter((task) => task.status === status)}
+              tasks={filteredTasks.filter((task) => task.status === status)}
               agentLabels={Object.fromEntries(profiles.map((profile) => [profile.id, profile.name]))}
               packLabels={Object.fromEntries(packs.map((pack) => [pack.id, pack.name]))}
               onDropTask={(taskId) => updateTask.mutate({ id: taskId, data: { status } })}
               onSelectTask={props.onSelectTask}
               onMove={(taskId, nextStatus) => updateTask.mutate({ id: taskId, data: { status: nextStatus } })}
+              onDeleteTask={(taskId) => deleteTask.mutate(taskId)}
               onRun={(task) => {
                 if (!task.assignedAgentProfileId) return;
                 runAgent.mutate({ projectId, taskId: task.id, agentProfileId: task.assignedAgentProfileId });
@@ -563,6 +592,7 @@ function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
                   >
                     Run Agent
                   </Button>
+                  <Button variant="secondary" onPress={() => deleteTask.mutate(selectedTask.id)}>Delete Task</Button>
                   <Button variant="secondary" onPress={() => props.onSelectTask(null)}>Close</Button>
                 </ButtonGroup>
               </Flex>
@@ -584,6 +614,7 @@ function KanbanColumn(props: {
   onDropTask: (taskId: string) => void;
   onSelectTask: (taskId: string | null) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => void;
+  onDeleteTask: (taskId: string) => void;
   onRun: (task: TaskDto) => void;
 }) {
   return (
@@ -640,12 +671,14 @@ function KanbanColumn(props: {
                       if (key === "run") props.onRun(task);
                       if (key === "left") props.onMove(task.id, previousStatus(task.status));
                       if (key === "right") props.onMove(task.id, nextStatus(task.status));
+                      if (key === "delete") props.onDeleteTask(task.id);
                     }}
                   >
                     <Item key="detail">Open Details</Item>
                     <Item key="run">Run Agent</Item>
                     <Item key="left">Move Left</Item>
                     <Item key="right">Move Right</Item>
+                    <Item key="delete">Delete Task</Item>
                   </ActionMenu>
                 </Flex>
                 <Content>{task.description}</Content>
