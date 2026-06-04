@@ -20,3 +20,19 @@
 - Agent execution is implemented by a mock runtime that records prompts, output, timing, token usage, and context snapshots.
 - Git inspection is handled through a `GitService` abstraction backed by `simple-git`.
 - Context diffs are computed by comparing the context snapshot stored on each run.
+
+## Navigation Architecture
+
+- The desktop shell uses a two-level information architecture:
+  - a global `Dashboard` for cross-project visibility
+  - a project-scoped workspace for operational surfaces
+- Project-scoped routes live under `/projects/:projectId/*`.
+- Each project exposes the same child surfaces:
+  - `dashboard`
+  - `plans`
+  - `tasks`
+  - `context`
+  - `agent-runs`
+  - `git`
+- Sidebar expansion state for each project is persisted locally in the UI store so users can control navigation density per machine/profile.
+- Project selection still exists as UI state for convenience, but route params are the source of truth for project-scoped pages.

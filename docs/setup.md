@@ -19,6 +19,7 @@
 - SQLite database path is controlled by `DATABASE_URL`.
 - The default `.env.example` uses `file:./dev.db`.
 - The Git dashboard reads the local repository path stored on each project record.
+- Sidebar project expansion/collapse preferences are stored locally in the browser profile.
 
 ## Suggested Next Steps
 

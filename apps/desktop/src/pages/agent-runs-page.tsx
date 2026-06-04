@@ -4,10 +4,10 @@ import type { AgentRunWithDiffDto } from "@agentboard/shared";
 import { SectionHeader, SurfaceCard } from "@agentboard/ui";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
-import { useAppStore } from "../store";
+import { useProjectId } from "../use-project-id";
 
 export function AgentRunsPage() {
-  const projectId = useAppStore((state) => state.activeProjectId);
+  const projectId = useProjectId();
   const runsQuery = useQuery({ queryKey: ["agent-runs", projectId], queryFn: () => api.getAgentRuns(projectId!), enabled: Boolean(projectId) });
 
   if (!projectId) return <EmptyState label="No project selected" />;

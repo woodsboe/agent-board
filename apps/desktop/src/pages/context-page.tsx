@@ -27,10 +27,10 @@ import type { ContextItemDto, ContextPackDto } from "@agentboard/shared";
 import { SectionHeader, SurfaceCard } from "@agentboard/ui";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
-import { useAppStore } from "../store";
+import { useProjectId } from "../use-project-id";
 
 export function ContextPage() {
-  const projectId = useAppStore((state) => state.activeProjectId);
+  const projectId = useProjectId();
   const queryClient = useQueryClient();
   const itemsQuery = useQuery({ queryKey: ["context-items", projectId], queryFn: () => api.getContextItems(projectId!), enabled: Boolean(projectId) });
   const packsQuery = useQuery({ queryKey: ["context-packs", projectId], queryFn: () => api.getContextPacks(projectId!), enabled: Boolean(projectId) });

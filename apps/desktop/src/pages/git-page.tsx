@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { SectionHeader, SurfaceCard } from "@agentboard/ui";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
-import { useAppStore } from "../store";
+import { useProjectId } from "../use-project-id";
 
 export function GitPage() {
-  const projectId = useAppStore((state) => state.activeProjectId);
+  const projectId = useProjectId();
   const gitQuery = useQuery({ queryKey: ["git", projectId], queryFn: () => api.getGitDashboard(projectId!), enabled: Boolean(projectId) });
 
   if (!projectId) return <EmptyState label="No project selected" />;

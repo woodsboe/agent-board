@@ -2,11 +2,12 @@ import { Content, Flex, Heading, Meter, ProgressBar, ProgressCircle, Text, View,
 import { useQuery } from "@tanstack/react-query";
 import { SectionHeader, SurfaceCard } from "@agentboard/ui";
 import { api } from "../api";
-import { useAppStore } from "../store";
 import { EmptyState } from "../components/EmptyState";
+import { useProjectId } from "../use-project-id";
 
 export function DashboardPage() {
-  const projectId = useAppStore((state) => state.activeProjectId);
+  const projectId = useProjectId();
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: api.getProjects });
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", projectId],
     queryFn: () => api.getDashboard(projectId!),
@@ -17,10 +18,11 @@ export function DashboardPage() {
   if (dashboardQuery.isLoading) return <ProgressCircle aria-label="Loading dashboard" isIndeterminate />;
 
   const data = dashboardQuery.data!;
+  const projectName = projectsQuery.data?.find((project) => project.id === projectId)?.name ?? "Project";
 
   return (
     <Flex direction="column" gap="size-250">
-      <SectionHeader title="Dashboard" />
+      <SectionHeader title={`${projectName} Dashboard`} />
       <Flex gap="size-200" wrap>
         <SurfaceCard title="Open Tasks">
           <Heading level={1}>{data.openTasks}</Heading>

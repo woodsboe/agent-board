@@ -28,10 +28,11 @@ import { useAppStore } from "../store";
 import { canDropLiftedTask, toggleLiftedTask } from "../task-move-mode";
 import { nextStatus, previousStatus } from "../task-status";
 import { buildTaskRunSummary, type TaskRunSummary } from "../task-run-summary";
+import { useProjectId } from "../use-project-id";
 import "./tasks-page.css";
 
 export function TasksPage(props: { onSelectTask: (id: string | null) => void }) {
-  const projectId = useAppStore((state) => state.activeProjectId);
+  const projectId = useProjectId();
   const selectedTaskId = useAppStore((state) => state.selectedTaskId);
   const detailPanelWidth = useAppStore((state) => state.detailPanelWidth);
   const queryClient = useQueryClient();

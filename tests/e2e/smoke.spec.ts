@@ -1,13 +1,28 @@
 import { expect, test } from "@playwright/test";
 
-test("seeded dashboard renders project metrics", async ({ page }) => {
+test("global dashboard renders portfolio metrics", async ({ page }) => {
   await page.goto("/dashboard");
 
   await expect(page.getByRole("button", { name: "AgentBoard Demo" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByText("Open Tasks")).toBeVisible();
+  await expect(page.getByText("Connected Agents")).toBeVisible();
   await expect(page.getByText("Running Tasks")).toBeVisible();
-  await expect(page.getByText("Completed Tasks")).toBeVisible();
+  await expect(page.getByText("Portfolio Status")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open Project" })).toBeVisible();
+});
+
+test("project expansion state persists across reload", async ({ page }) => {
+  await page.goto("/dashboard");
+
+  const expandButton = page.getByRole("button", { name: "Expand AgentBoard Demo" });
+  await expandButton.click();
+
+  await expect(page.getByRole("link", { name: "Tasks" })).toBeVisible();
+
+  await page.reload();
+
+  await expect(page.getByRole("link", { name: "Tasks" })).toBeVisible();
+  await expect(page.getByText("Running Tasks")).toBeVisible();
 });
 
 test("task move mode can be activated and cancelled from the board", async ({ page }) => {

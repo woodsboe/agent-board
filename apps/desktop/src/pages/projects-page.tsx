@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import { Button, ButtonGroup, Content, Flex, Form, Text, TextArea, TextField, View, Well } from "@adobe/react-spectrum";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SectionHeader, SurfaceCard } from "@agentboard/ui";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAppStore } from "../store";
 
 export function ProjectsPage() {
+  const navigate = useNavigate();
   const activeProjectId = useAppStore((state) => state.activeProjectId);
   const setActiveProjectId = useAppStore((state) => state.setActiveProjectId);
+  const setProjectExpanded = useAppStore((state) => state.setProjectExpanded);
   const queryClient = useQueryClient();
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: api.getProjects });
   const createProject = useMutation({
@@ -72,7 +75,17 @@ export function ProjectsPage() {
               </View>
               <ButtonGroup>
                 <Button variant={activeProjectId === project.id ? "accent" : "secondary"} onPress={() => setActiveProjectId(project.id)}>
-                  {activeProjectId === project.id ? "Selected" : "Open"}
+                  {activeProjectId === project.id ? "Selected" : "Select"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onPress={() => {
+                    setActiveProjectId(project.id);
+                    setProjectExpanded(project.id, true);
+                    navigate(`/projects/${project.id}/dashboard`);
+                  }}
+                >
+                  Open Workspace
                 </Button>
                 <Button variant="secondary" onPress={() => setEditingProjectId(project.id)}>Edit</Button>
               </ButtonGroup>

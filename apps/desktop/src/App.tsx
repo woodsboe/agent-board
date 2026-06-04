@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import {
+  ActionButton,
   Button,
   Content,
   Dialog,
@@ -10,14 +11,19 @@ import {
   Item,
   ListBox,
   ProgressCircle,
+  Text,
   View,
 } from "@adobe/react-spectrum";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TaskDto } from "@agentboard/shared";
-import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { useAppStore } from "./store";
 
+const GlobalDashboardPage = lazy(async () => {
+  const module = await import("./pages/global-dashboard-page");
+  return { default: module.GlobalDashboardPage };
+});
 const DashboardPage = lazy(async () => {
   const module = await import("./pages/dashboard-page");
   return { default: module.DashboardPage };
@@ -51,6 +57,15 @@ const SettingsPage = lazy(async () => {
   return { default: module.SettingsPage };
 });
 
+const projectSections = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "plans", label: "Plans" },
+  { id: "tasks", label: "Tasks" },
+  { id: "context", label: "Context" },
+  { id: "agent-runs", label: "Agent Runs" },
+  { id: "git", label: "Git" },
+] as const;
+
 function RouteLoader() {
   return (
     <Flex alignItems="center" justifyContent="center" minHeight="320px">
@@ -59,7 +74,32 @@ function RouteLoader() {
   );
 }
 
+function NavItem(props: { to: string; label: string; indent?: boolean }) {
+  return (
+    <NavLink
+      to={props.to}
+      style={({ isActive }) => ({
+        color: "inherit",
+        textDecoration: "none",
+        display: "block",
+        padding: "8px 10px",
+        borderRadius: "10px",
+        marginLeft: props.indent ? "18px" : "0",
+        background: isActive ? "rgba(69, 91, 135, 0.2)" : "transparent",
+        fontWeight: isActive ? 600 : 400,
+      })}
+    >
+      {props.label}
+    </NavLink>
+  );
+}
+
+function redirectToProjectPath(activeProjectId: string | null, section: string) {
+  return activeProjectId ? `/projects/${activeProjectId}/${section}` : "/projects";
+}
+
 function Shell() {
+  const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const {
@@ -72,14 +112,25 @@ function Shell() {
     themeMode,
     boardDensity,
     sidebarWidth,
+    expandedProjects,
+    setProjectExpanded,
+    toggleProjectExpanded,
   } = useAppStore();
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: api.getProjects });
 
+  const activeProjectIdFromRoute = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] ?? null;
+
   useEffect(() => {
+    if (activeProjectIdFromRoute) {
+      setActiveProjectId(activeProjectIdFromRoute);
+      setProjectExpanded(activeProjectIdFromRoute, true);
+      return;
+    }
+
     if (!activeProjectId && projectsQuery.data?.[0]) {
       setActiveProjectId(projectsQuery.data[0].id);
     }
-  }, [activeProjectId, projectsQuery.data, setActiveProjectId]);
+  }, [activeProjectId, activeProjectIdFromRoute, projectsQuery.data, setActiveProjectId, setProjectExpanded]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -98,12 +149,16 @@ function Shell() {
   }, [boardDensity, themeMode]);
 
   const sidebarWidthValue = sidebarWidth === "narrow" ? 240 : sidebarWidth === "wide" ? 360 : 300;
+  const defaultProjectId = activeProjectId ?? projectsQuery.data?.[0]?.id ?? null;
 
   const commands = [
-    { id: "create-task", label: "Create Task", run: () => navigate("/tasks") },
-    { id: "create-plan", label: "Create Plan", run: () => navigate("/plans") },
-    { id: "create-context-item", label: "Create Context Item", run: () => navigate("/context") },
-    { id: "create-context-pack", label: "Create Context Pack", run: () => navigate("/context") },
+    { id: "open-dashboard", label: "Open Global Dashboard", run: () => navigate("/dashboard") },
+    { id: "open-projects", label: "Open Projects", run: () => navigate("/projects") },
+    { id: "open-project-dashboard", label: "Open Project Dashboard", run: () => navigate(redirectToProjectPath(defaultProjectId, "dashboard")) },
+    { id: "create-task", label: "Create Task", run: () => navigate(redirectToProjectPath(defaultProjectId, "tasks")) },
+    { id: "create-plan", label: "Create Plan", run: () => navigate(redirectToProjectPath(defaultProjectId, "plans")) },
+    { id: "create-context-item", label: "Create Context Item", run: () => navigate(redirectToProjectPath(defaultProjectId, "context")) },
+    { id: "create-context-pack", label: "Create Context Pack", run: () => navigate(redirectToProjectPath(defaultProjectId, "context")) },
     {
       id: "run-agent",
       label: "Run Agent",
@@ -117,8 +172,8 @@ function Shell() {
         queryClient.invalidateQueries({ queryKey: ["dashboard", activeProjectId] });
       },
     },
-    { id: "search-context", label: "Search Context", run: () => navigate("/context") },
-    { id: "open-project", label: "Open Project", run: () => navigate("/projects") },
+    { id: "search-context", label: "Search Context", run: () => navigate(redirectToProjectPath(defaultProjectId, "context")) },
+    { id: "open-git", label: "Open Git", run: () => navigate(redirectToProjectPath(defaultProjectId, "git")) },
   ];
 
   if (projectsQuery.isLoading) {
@@ -142,38 +197,68 @@ function Shell() {
         >
           <Heading level={2}>AgentBoard</Heading>
           <Content marginBottom="size-250">Local-first operating system for agentic software projects.</Content>
+          <Flex direction="column" gap="size-100">
+            <NavItem to="/dashboard" label="Dashboard" />
+            <NavItem to="/projects" label="Projects" />
+          </Flex>
           <Flex direction="column" gap="size-100" marginTop="size-150">
-            {(projectsQuery.data ?? []).map((project) => (
-              <Button
-                key={project.id}
-                variant={activeProjectId === project.id ? "accent" : "secondary"}
-                onPress={() => setActiveProjectId(project.id)}
-              >
-                {project.name}
-              </Button>
-            ))}
+            {(projectsQuery.data ?? []).map((project) => {
+              const expanded = expandedProjects[project.id] ?? false;
+              const isActiveProject = activeProjectId === project.id || activeProjectIdFromRoute === project.id;
+
+              return (
+                <View key={project.id}>
+                  <Flex alignItems="center" gap="size-100">
+                    <ActionButton aria-label={expanded ? `Collapse ${project.name}` : `Expand ${project.name}`} onPress={() => toggleProjectExpanded(project.id)}>
+                      {expanded ? "-" : "+"}
+                    </ActionButton>
+                    <Button
+                      variant={isActiveProject ? "accent" : "secondary"}
+                      onPress={() => {
+                        setActiveProjectId(project.id);
+                        setProjectExpanded(project.id, true);
+                        navigate(`/projects/${project.id}/dashboard`);
+                      }}
+                    >
+                      {project.name}
+                    </Button>
+                  </Flex>
+                  {expanded ? (
+                    <Flex direction="column" gap="size-50" marginTop="size-75">
+                      {projectSections.map((section) => (
+                        <NavItem key={section.id} to={`/projects/${project.id}/${section.id}`} label={section.label} indent />
+                      ))}
+                    </Flex>
+                  ) : null}
+                </View>
+              );
+            })}
           </Flex>
           <Divider size="S" marginY="size-250" />
-          <Flex direction="column" gap="size-100">
-            {["dashboard", "projects", "plans", "tasks", "context", "agent-runs", "git", "settings"].map((path) => (
-              <NavLink key={path} to={`/${path}`} style={{ color: "inherit", textDecoration: "none" }}>
-                {path.replace("-", " ").replace(/\b\w/g, (m) => m.toUpperCase())}
-              </NavLink>
-            ))}
-          </Flex>
+          <NavItem to="/settings" label="Settings" />
+          {activeProjectId ? (
+            <Text UNSAFE_style={{ marginTop: "12px", fontSize: "12px", opacity: 0.8 }}>Active project: {projectsQuery.data?.find((project) => project.id === activeProjectId)?.name}</Text>
+          ) : null}
         </View>
         <View flex minWidth={0} padding="size-250" overflow="auto">
           <Suspense fallback={<RouteLoader />}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/dashboard" element={<GlobalDashboardPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
-              <Route path="/plans" element={<PlansPage />} />
-              <Route path="/tasks" element={<TasksPage onSelectTask={setSelectedTaskId} />} />
-              <Route path="/context" element={<ContextPage />} />
-              <Route path="/agent-runs" element={<AgentRunsPage />} />
-              <Route path="/git" element={<GitPage />} />
+              <Route path="/projects/:projectId" element={<Navigate to="dashboard" replace />} />
+              <Route path="/projects/:projectId/dashboard" element={<DashboardPage />} />
+              <Route path="/projects/:projectId/plans" element={<PlansPage />} />
+              <Route path="/projects/:projectId/tasks" element={<TasksPage onSelectTask={setSelectedTaskId} />} />
+              <Route path="/projects/:projectId/context" element={<ContextPage />} />
+              <Route path="/projects/:projectId/agent-runs" element={<AgentRunsPage />} />
+              <Route path="/projects/:projectId/git" element={<GitPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/plans" element={<Navigate to={redirectToProjectPath(defaultProjectId, "plans")} replace />} />
+              <Route path="/tasks" element={<Navigate to={redirectToProjectPath(defaultProjectId, "tasks")} replace />} />
+              <Route path="/context" element={<Navigate to={redirectToProjectPath(defaultProjectId, "context")} replace />} />
+              <Route path="/agent-runs" element={<Navigate to={redirectToProjectPath(defaultProjectId, "agent-runs")} replace />} />
+              <Route path="/git" element={<Navigate to={redirectToProjectPath(defaultProjectId, "git")} replace />} />
             </Routes>
           </Suspense>
         </View>

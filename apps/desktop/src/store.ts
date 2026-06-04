@@ -14,6 +14,7 @@ type AppState = {
   boardDensity: BoardDensity;
   sidebarWidth: SidebarWidth;
   detailPanelWidth: DetailPanelWidth;
+  expandedProjects: Record<string, boolean>;
   setActiveProjectId: (id: string) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setSelectedTaskId: (id: string | null) => void;
@@ -21,6 +22,8 @@ type AppState = {
   setBoardDensity: (boardDensity: BoardDensity) => void;
   setSidebarWidth: (sidebarWidth: SidebarWidth) => void;
   setDetailPanelWidth: (detailPanelWidth: DetailPanelWidth) => void;
+  setProjectExpanded: (projectId: string, expanded: boolean) => void;
+  toggleProjectExpanded: (projectId: string) => void;
 };
 
 export const useAppStore = create<AppState>()(
@@ -33,6 +36,7 @@ export const useAppStore = create<AppState>()(
       boardDensity: "comfortable",
       sidebarWidth: "standard",
       detailPanelWidth: "standard",
+      expandedProjects: {},
       setActiveProjectId: (id) => set({ activeProjectId: id }),
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
       setSelectedTaskId: (id) => set({ selectedTaskId: id }),
@@ -40,6 +44,17 @@ export const useAppStore = create<AppState>()(
       setBoardDensity: (boardDensity) => set({ boardDensity }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setDetailPanelWidth: (detailPanelWidth) => set({ detailPanelWidth }),
+      setProjectExpanded: (projectId, expanded) =>
+        set((state) => ({
+          expandedProjects: { ...state.expandedProjects, [projectId]: expanded },
+        })),
+      toggleProjectExpanded: (projectId) =>
+        set((state) => ({
+          expandedProjects: {
+            ...state.expandedProjects,
+            [projectId]: !(state.expandedProjects[projectId] ?? false),
+          },
+        })),
     }),
     {
       name: "agentboard-ui-preferences",
@@ -50,6 +65,7 @@ export const useAppStore = create<AppState>()(
         boardDensity: state.boardDensity,
         sidebarWidth: state.sidebarWidth,
         detailPanelWidth: state.detailPanelWidth,
+        expandedProjects: state.expandedProjects,
       }),
     },
   ),

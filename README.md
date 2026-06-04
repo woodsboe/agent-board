@@ -2,6 +2,19 @@
 
 AgentBoard is a production-oriented local-first MVP for managing agentic software development work. It combines planning, kanban execution, context curation, Git visibility, mock agent orchestration, and token-cost auditing in a monorepo that is ready for future real AI integrations without depending on them in V1.
 
+## Navigation Model
+
+- Global `Dashboard` acts as the portfolio control tower for connected agents, tracked projects, running tasks, recent runs, and aggregate token usage.
+- `Projects` is the entry point for project management and workspace selection.
+- Every project owns the same workspace structure:
+  - `Dashboard`
+  - `Plans`
+  - `Tasks`
+  - `Context`
+  - `Agent Runs`
+  - `Git`
+- Project groups in the sidebar can be expanded or collapsed independently, and that UI state is persisted locally.
+
 ## Product Scope
 
 - Local-first persistence with SQLite and local Git repositories
@@ -20,7 +33,8 @@ AgentBoard is a production-oriented local-first MVP for managing agentic softwar
 - Mock agent execution with persisted runs, prompts, outputs, timing, and token usage
 - Context diffing between runs via stored snapshots
 - Git repository dashboard using `simple-git`
-- Project dashboard with task, plan, and token summaries
+- Global dashboard with portfolio-level operational status
+- Per-project dashboards with task, plan, and token summaries
 - Keyboard-first command palette via `Cmd/Ctrl + K`
 
 ## Monorepo Layout
