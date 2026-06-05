@@ -1,6 +1,6 @@
-import { Content, Flex, Heading, Meter, ProgressBar, ProgressCircle, Text, View, Well } from "@adobe/react-spectrum";
+import { Content, Flex, Meter, ProgressBar, ProgressCircle, Text, View, Well } from "@adobe/react-spectrum";
 import { useQuery } from "@tanstack/react-query";
-import { SectionHeader, SurfaceCard } from "@agentboard/ui";
+import { SectionHeader, StatTile, SurfaceCard } from "@agentboard/ui";
 import { api } from "../api";
 import { EmptyState } from "../components/EmptyState";
 import { useProjectId } from "../use-project-id";
@@ -24,19 +24,10 @@ export function DashboardPage() {
     <Flex direction="column" gap="size-250">
       <SectionHeader title={`${projectName} Dashboard`} />
       <Flex gap="size-200" wrap>
-        <SurfaceCard title="Open Tasks">
-          <Heading level={1}>{data.openTasks}</Heading>
-        </SurfaceCard>
-        <SurfaceCard title="Running Tasks">
-          <Heading level={1}>{data.runningTasks}</Heading>
-        </SurfaceCard>
-        <SurfaceCard title="Completed Tasks">
-          <Heading level={1}>{data.completedTasks}</Heading>
-        </SurfaceCard>
-        <SurfaceCard title="Plans">
-          <Content>Active: {data.activePlans}</Content>
-          <Content>Approved: {data.approvedPlans}</Content>
-        </SurfaceCard>
+        <StatTile label="Open Tasks" value={data.openTasks} />
+        <StatTile label="Running Tasks" value={data.runningTasks} />
+        <StatTile label="Completed Tasks" value={data.completedTasks} />
+        <StatTile label="Plans" value={data.activePlans} hint={`${data.approvedPlans} approved`} />
       </Flex>
       <Flex gap="size-200" wrap>
         <SurfaceCard title="Project Token Usage" description={`${data.tokenUsageByProject} total tokens`}>

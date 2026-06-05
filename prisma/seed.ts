@@ -12,31 +12,58 @@ async function main() {
   await prisma.contextItem.deleteMany();
   await prisma.agentProfile.deleteMany();
   await prisma.project.deleteMany();
+  await prisma.gitAccount.deleteMany();
+  await prisma.credential.deleteMany();
+
+  // Seeded profiles span every runtime so the catalog is self-documenting.
+  // None carry a credential, so they transparently fall back to the mock
+  // runtime until the user connects a real key — the app works out of the box.
+  const profileSpecs: Array<{
+    name: string;
+    description: string;
+    provider: string;
+    runtimeKind: string;
+    model: string;
+    baseUrl?: string;
+  }> = [
+    { name: "Claude Sonnet (API)", description: "Anthropic Messages API for implementation and review.", provider: "anthropic", runtimeKind: "api", model: "claude-sonnet-4-6" },
+    { name: "Claude Code (CLI)", description: "Drives the local `claude` CLI inside the project repo.", provider: "claude-cli", runtimeKind: "cli", model: "claude-code" },
+    { name: "Codex (CLI)", description: "Drives the local `codex` CLI inside the project repo.", provider: "codex-cli", runtimeKind: "cli", model: "codex" },
+    { name: "GPT (API)", description: "OpenAI chat completions for planning and code generation.", provider: "openai", runtimeKind: "api", model: "gpt-4o" },
+    { name: "Local Llama (Ollama)", description: "OpenAI-compatible local model served by Ollama.", provider: "openai-compatible", runtimeKind: "api", model: "llama3.1", baseUrl: "http://localhost:11434/v1" },
+  ];
 
   const profiles = await Promise.all(
-    [
-      ["Frontend Engineer", "Builds UI flows and client-side architecture"],
-      ["Backend Engineer", "Implements API and persistence logic"],
-      ["Refactoring Specialist", "Improves maintainability with low regression risk"],
-      ["QA Reviewer", "Reviews behavior, risk, and test coverage"],
-      ["Architecture Reviewer", "Checks boundaries, tradeoffs, and scalability"],
-    ].map(([name, description]) =>
+    profileSpecs.map((spec) =>
       prisma.agentProfile.create({
         data: {
-          name,
-          description,
-          systemPrompt: `${name}: ${description}.`,
-          model: "mock-runtime-v1",
+          name: spec.name,
+          description: spec.description,
+          systemPrompt: `You are ${spec.name}. ${spec.description} Work carefully and explain your reasoning.`,
+          model: spec.model,
+          provider: spec.provider,
+          runtimeKind: spec.runtimeKind,
+          baseUrl: spec.baseUrl ?? null,
         },
       }),
     ),
   );
+
+  const gitAccount = await prisma.gitAccount.create({
+    data: {
+      name: "Local Workspace",
+      host: "github",
+      authorName: "AgentBoard Demo",
+      authorEmail: "demo@agentboard.local",
+    },
+  });
 
   const project = await prisma.project.create({
     data: {
       name: "AgentBoard Demo",
       description: "Demo project for local-first agentic project management.",
       gitRepositoryPath: ".",
+      gitAccountId: gitAccount.id,
     },
   });
 
@@ -160,7 +187,7 @@ async function main() {
       taskId: tasks[2].id,
       agentProfileId: profiles[1].id,
       status: "Completed",
-      prompt: "Agent Profile: Backend Engineer\nTask: Running Task",
+      prompt: `Agent Profile: ${profiles[1].name}\nTask: Running Task`,
       output: "Mock execution completed successfully.\nTask analyzed.\nRecommended changes generated.\nReview required.",
       contextSnapshot: JSON.stringify(
         contextItems.slice(0, 2).map((item) => ({
@@ -189,7 +216,7 @@ async function main() {
       taskId: tasks[3].id,
       agentProfileId: profiles[0].id,
       status: "Completed",
-      prompt: "Agent Profile: Frontend Engineer\nTask: Review Task",
+      prompt: `Agent Profile: ${profiles[0].name}\nTask: Review Task`,
       output: "Mock execution completed successfully.\nTask analyzed.\nRecommended changes generated.\nReview required.",
       contextSnapshot: JSON.stringify(
         [contextItems[0], contextItems[2]].map((item) => ({

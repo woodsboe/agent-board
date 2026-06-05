@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import {
   ActionButton,
   Button,
@@ -11,6 +11,7 @@ import {
   Item,
   ListBox,
   ProgressCircle,
+  SearchField,
   Text,
   View,
 } from "@adobe/react-spectrum";
@@ -117,6 +118,7 @@ function Shell() {
     toggleProjectExpanded,
   } = useAppStore();
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: api.getProjects });
+  const [paletteQuery, setPaletteQuery] = useState("");
 
   const activeProjectIdFromRoute = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] ?? null;
 
@@ -136,6 +138,7 @@ function Shell() {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setPaletteQuery("");
         setCommandPaletteOpen(true);
       }
     };
@@ -265,24 +268,44 @@ function Shell() {
       </Flex>
       <DialogContainer onDismiss={() => setCommandPaletteOpen(false)}>
         {commandPaletteOpen ? (
-          <Dialog>
-            <Heading>Command Palette</Heading>
-            <Content>
-              <ListBox
-                aria-label="Command palette"
-                items={commands}
-                selectionMode="single"
-                onSelectionChange={(keys) => {
-                  const key = Array.from(keys)[0];
-                  const command = commands.find((entry) => entry.id === key);
-                  setCommandPaletteOpen(false);
-                  command?.run();
-                }}
-              >
-                {(command) => <Item key={command.id}>{command.label}</Item>}
-              </ListBox>
-            </Content>
-          </Dialog>
+          (() => {
+            const matches = commands.filter((command) => command.label.toLowerCase().includes(paletteQuery.trim().toLowerCase()));
+            const runCommand = (id: string | number) => {
+              const command = commands.find((entry) => entry.id === id);
+              setCommandPaletteOpen(false);
+              command?.run();
+            };
+            return (
+              <Dialog>
+                <Heading>Command Palette</Heading>
+                <Divider />
+                <Content>
+                  <Flex direction="column" gap="size-100">
+                    <SearchField
+                      aria-label="Search commands"
+                      autoFocus
+                      value={paletteQuery}
+                      onChange={setPaletteQuery}
+                      onSubmit={() => {
+                        if (matches[0]) runCommand(matches[0].id);
+                      }}
+                    />
+                    <ListBox
+                      aria-label="Command palette"
+                      items={matches}
+                      selectionMode="single"
+                      onSelectionChange={(keys) => {
+                        const key = Array.from(keys)[0];
+                        if (key !== undefined) runCommand(key);
+                      }}
+                    >
+                      {(command) => <Item key={command.id}>{command.label}</Item>}
+                    </ListBox>
+                  </Flex>
+                </Content>
+              </Dialog>
+            );
+          })()
         ) : null}
       </DialogContainer>
     </Flex>

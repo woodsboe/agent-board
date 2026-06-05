@@ -59,8 +59,10 @@ model Project {
   name              String
   description       String
   gitRepositoryPath String
+  gitAccountId      String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+  gitAccount        GitAccount?   @relation(fields: [gitAccountId], references: [id], onDelete: SetNull)
   plans             Plan[]
   tasks             Task[]
   contextItems      ContextItem[]
@@ -140,13 +142,22 @@ model ContextPackItem {
 }
 
 model AgentProfile {
-  id          String     @id @default(cuid())
-  name        String
-  description String
+  id           String      @id @default(cuid())
+  name         String
+  description  String
   systemPrompt String
-  model       String
-  tasks       Task[]
-  agentRuns   AgentRun[]
+  model        String
+  provider     String      @default("mock")
+  runtimeKind  String      @default("api")
+  credentialId String?
+  baseUrl      String?
+  temperature  Float?
+  maxTokens    Int?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  credential   Credential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  tasks        Task[]
+  agentRuns    AgentRun[]
 }
 
 model AgentRun {
@@ -157,6 +168,7 @@ model AgentRun {
   status          AgentRunStatus @default(Queued)
   prompt          String
   output          String
+  error           String?
   contextSnapshot String
   startedAt       DateTime
   completedAt     DateTime?
@@ -174,4 +186,32 @@ model TokenUsage {
   totalTokens      Int
   estimatedCost    Float
   agentRun         AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+}
+
+model Credential {
+  id            String         @id @default(cuid())
+  name          String
+  kind          String
+  provider      String
+  encrypted     String
+  preview       String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
+  agentProfiles AgentProfile[]
+  gitAccounts   GitAccount[]
+}
+
+model GitAccount {
+  id           String      @id @default(cuid())
+  name         String
+  host         String      @default("github")
+  authorName   String
+  authorEmail  String
+  apiBaseUrl   String?
+  remoteUrl    String?
+  credentialId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @default(now()) @updatedAt
+  credential   Credential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  projects     Project[]
 }

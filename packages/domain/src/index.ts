@@ -5,12 +5,35 @@ export const contextTypes = ["Architecture", "Code", "Design", "API", "Decision"
 export const contextSourceTypes = ["Manual", "File", "Git", "URL", "Figma"] as const;
 export const agentRunStatuses = ["Queued", "Running", "Completed", "Failed"] as const;
 
+/** Agent runtimes. `mock` always runs offline and is the fallback when a profile has no usable credential. */
+export const agentProviders = ["mock", "anthropic", "openai", "openai-compatible", "claude-cli", "codex-cli"] as const;
+/** How an agent executes: a hosted/local HTTP API, or a spawned local CLI binary. */
+export const runtimeKinds = ["api", "cli"] as const;
+/** Git hosting providers we can read pull requests and issues from. */
+export const gitHosts = ["github", "gitlab", "generic"] as const;
+/** What a stored secret is used for. */
+export const credentialKinds = ["provider_api_key", "git_pat"] as const;
+
 export type PlanStatus = (typeof planStatuses)[number];
 export type TaskStatus = (typeof taskStatuses)[number];
 export type TaskPriority = (typeof taskPriorities)[number];
 export type ContextType = (typeof contextTypes)[number];
 export type ContextSourceType = (typeof contextSourceTypes)[number];
 export type AgentRunStatus = (typeof agentRunStatuses)[number];
+export type AgentProvider = (typeof agentProviders)[number];
+export type RuntimeKind = (typeof runtimeKinds)[number];
+export type GitHost = (typeof gitHosts)[number];
+export type CredentialKind = (typeof credentialKinds)[number];
+
+/** Maps each provider to the runtime it executes under — used by UI and the adapter registry. */
+export const providerRuntimeKind: Record<AgentProvider, RuntimeKind> = {
+  mock: "api",
+  anthropic: "api",
+  openai: "api",
+  "openai-compatible": "api",
+  "claude-cli": "cli",
+  "codex-cli": "cli",
+};
 
 export type ContextSnapshotItem = {
   id: string;

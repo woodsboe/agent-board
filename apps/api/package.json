@@ -13,9 +13,11 @@
     "@agentboard/domain": "workspace:*",
     "@agentboard/services": "workspace:*",
     "@agentboard/shared": "workspace:*",
+    "@anthropic-ai/sdk": "^0.32.1",
     "@fastify/cors": "^11.1.0",
     "@prisma/client": "^6.9.0",
     "fastify": "^5.4.0",
+    "openai": "^4.77.0",
     "simple-git": "^3.27.0",
     "zod": "^3.25.67"
   }

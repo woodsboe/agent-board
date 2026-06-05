@@ -1,5 +1,4 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { TaskDto } from "@agentboard/shared";
@@ -14,15 +13,9 @@ vi.mock("@adobe/react-spectrum", () => {
           </button>
         );
       }
-
       if (name === "ActionMenu") {
         return <div aria-label={props["aria-label"]}>{props.children}</div>;
       }
-
-      if (name === "Picker") {
-        return <button aria-label={props["aria-label"]} />;
-      }
-
       return <div role={defaultRole}>{props.children}</div>;
     };
   }
@@ -41,23 +34,18 @@ vi.mock("@adobe/react-spectrum", () => {
     Heading: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
     Item: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
     ListBox: wrap("ListBox", "listbox"),
+    Meter: wrap("Meter"),
+    Picker: wrap("Picker"),
+    ProgressCircle: wrap("ProgressCircle"),
     SearchField: ({ "aria-label": ariaLabel }: { "aria-label"?: string }) => <input aria-label={ariaLabel} />,
+    TabList: wrap("TabList"),
+    TabPanels: wrap("TabPanels"),
+    Tabs: wrap("Tabs"),
     Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
     TextArea: wrap("TextArea"),
     TextField: wrap("TextField"),
     View: wrap("View"),
     Well: wrap("Well"),
-    IllustratedMessage: wrap("IllustratedMessage"),
-    ProgressCircle: wrap("ProgressCircle"),
-    TableView: wrap("TableView"),
-    TableHeader: wrap("TableHeader"),
-    TableBody: wrap("TableBody"),
-    Column: wrap("Column"),
-    Row: wrap("Row"),
-    Cell: wrap("Cell"),
-    Meter: wrap("Meter"),
-    Picker: wrap("Picker"),
-    ProgressBar: wrap("ProgressBar"),
   };
 });
 
@@ -83,63 +71,41 @@ function renderColumn(overrides?: Partial<ComponentProps<typeof KanbanColumn>>) 
     status: "Backlog",
     tasks: [task],
     agentLabels: { "agent-1": "Frontend Engineer" },
-    packLabels: { "pack-1": "Zustand Migration Pack" },
-    runSummary: {
-      "task-1": {
-        latestRun: null,
-        runCount: 0,
-        totalTokens: 0,
-        totalCost: 0,
-      },
-    },
-    liftedTaskId: null,
-    liftedTaskStatus: null,
+    runSummary: { "task-1": { latestRun: null, runCount: 0, totalTokens: 0, totalCost: 0 } },
+    selectedTaskId: null,
+    isDropTarget: false,
+    onDragOverColumn: vi.fn(),
     onDropTask: vi.fn(),
     onSelectTask: vi.fn(),
-    onEditTask: vi.fn(),
-    onQuickUpdate: vi.fn(),
-    onLiftTask: vi.fn(),
-    onDropLiftedTask: vi.fn(),
-    onMove: vi.fn(),
-    onDeleteTask: vi.fn(),
     onRun: vi.fn(),
+    onEdit: vi.fn(),
+    onDelete: vi.fn(),
+    onMove: vi.fn(),
     ...overrides,
   };
 
-  return {
-    user: userEvent.setup(),
-    props,
-    ...render(<KanbanColumn {...props} />),
-  };
+  return { props, ...render(<KanbanColumn {...props} />) };
 }
 
 describe("KanbanColumn", () => {
-  it("hides the drop target when the lifted task is already in the same lane", () => {
-    renderColumn({ liftedTaskId: "task-1", liftedTaskStatus: "Backlog" });
-
-    expect(screen.queryByRole("button", { name: "Drop Here" })).not.toBeInTheDocument();
-    expect(screen.getByText("This task is in move mode. Choose a different lane drop button or press M again to cancel.")).toBeInTheDocument();
+  it("renders the task with its priority and assigned agent", () => {
+    renderColumn();
+    expect(screen.getByText("Backlog Task")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("Frontend Engineer")).toBeInTheDocument();
   });
 
-  it("shows the drop target for a lifted task from a different lane", async () => {
-    const onDropLiftedTask = vi.fn();
-    const { user } = renderColumn({
-      liftedTaskId: "task-2",
-      liftedTaskStatus: "Ready",
-      onDropLiftedTask,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Drop Here" }));
-
-    expect(onDropLiftedTask).toHaveBeenCalledWith("task-2");
+  it("selects a task when its card is clicked", () => {
+    const onSelectTask = vi.fn();
+    renderColumn({ onSelectTask });
+    fireEvent.click(screen.getByLabelText("Backlog Task task card"));
+    expect(onSelectTask).toHaveBeenCalledWith("task-1");
   });
 
-  it("uses the pick up button to toggle move mode for the task", async () => {
-    const onLiftTask = vi.fn();
-    const { user } = renderColumn({ onLiftTask });
-
-    await user.click(screen.getAllByRole("button", { name: "Pick Up" })[0]);
-
-    expect(onLiftTask).toHaveBeenCalledWith("task-1");
+  it("moves a task to the next lane with the right-arrow key", () => {
+    const onMove = vi.fn();
+    renderColumn({ onMove });
+    fireEvent.keyDown(screen.getByLabelText("Backlog Task task card"), { key: "ArrowRight" });
+    expect(onMove).toHaveBeenCalledWith("task-1", "Ready");
   });
 });

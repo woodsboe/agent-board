@@ -3,6 +3,8 @@ import type {
   AgentRun,
   ContextItem,
   ContextPack,
+  Credential,
+  GitAccount,
   Plan,
   Task,
   TokenUsage,
@@ -13,6 +15,8 @@ import type {
   AgentRunDto,
   ContextItemDto,
   ContextPackDto,
+  CredentialDto,
+  GitAccountDto,
   PlanDto,
   ProjectDto,
   TaskDto,
@@ -70,7 +74,48 @@ export function mapContextPack(
 }
 
 export function mapAgentProfile(profile: AgentProfile): AgentProfileDto {
-  return profile;
+  return {
+    id: profile.id,
+    name: profile.name,
+    description: profile.description,
+    systemPrompt: profile.systemPrompt,
+    model: profile.model,
+    provider: profile.provider as AgentProfileDto["provider"],
+    runtimeKind: profile.runtimeKind as AgentProfileDto["runtimeKind"],
+    credentialId: profile.credentialId ?? null,
+    baseUrl: profile.baseUrl ?? null,
+    temperature: profile.temperature ?? null,
+    maxTokens: profile.maxTokens ?? null,
+    createdAt: profile.createdAt.toISOString(),
+    updatedAt: profile.updatedAt.toISOString(),
+  };
+}
+
+export function mapCredential(credential: Credential): CredentialDto {
+  return {
+    id: credential.id,
+    name: credential.name,
+    kind: credential.kind as CredentialDto["kind"],
+    provider: credential.provider,
+    preview: credential.preview,
+    createdAt: credential.createdAt.toISOString(),
+    updatedAt: credential.updatedAt.toISOString(),
+  };
+}
+
+export function mapGitAccount(account: GitAccount): GitAccountDto {
+  return {
+    id: account.id,
+    name: account.name,
+    host: account.host as GitAccountDto["host"],
+    authorName: account.authorName,
+    authorEmail: account.authorEmail,
+    apiBaseUrl: account.apiBaseUrl ?? null,
+    remoteUrl: account.remoteUrl ?? null,
+    credentialId: account.credentialId ?? null,
+    createdAt: account.createdAt.toISOString(),
+    updatedAt: account.updatedAt.toISOString(),
+  };
 }
 
 export function mapTokenUsage(tokenUsage: TokenUsage): TokenUsageDto {

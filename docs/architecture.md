@@ -15,11 +15,23 @@
 - `apps/api`: REST API, orchestration services, Prisma persistence
 - `apps/desktop`: React Spectrum shell and feature surfaces
 
-## V1 Runtime
+## Agent Runtime
 
-- Agent execution is implemented by a mock runtime that records prompts, output, timing, token usage, and context snapshots.
-- Git inspection is handled through a `GitService` abstraction backed by `simple-git`.
+- Every runtime implements one interface, `AgentAdapter` (`packages/services`), whose `runTask(input, onChunk)` streams text and resolves to a status + output + token usage.
+- `apps/api/src/services/adapters/` provides the implementations — `anthropic-api`, `openai-api` (also OpenAI-compatible/local via `baseUrl`), `claude-cli`, `codex-cli`, and `mock` — selected per agent profile by `registry.ts`.
+- `resolveAdapter` falls back to the mock runtime when an API provider has no usable credential (or a local provider has no base URL), so a run never hard-fails purely for lack of configuration.
+- Runs are asynchronous: `POST /agent-runs` persists a `Running` row and executes in the background; output streams to subscribers via an in-memory broker (`lib/run-broker.ts`) and `GET /agent-runs/:id/stream` (SSE). The run is finalized to `Completed`/`Failed` with output, token usage, and any error.
 - Context diffs are computed by comparing the context snapshot stored on each run.
+
+## Secrets
+
+- Credentials are encrypted at rest with AES-256-GCM (`lib/crypto.ts`). The key is sourced from `AGENTBOARD_SECRET_KEY` or an auto-generated `prisma/.secret.key`.
+- Plaintext is decrypted only inside the API process when resolving an adapter or Git token; the API surface exposes only a masked preview.
+
+## Git
+
+- `GitService` (`simple-git`) provides identity-aware repo inspection plus GitHub/GitLab pull-request and issue reads via `fetch`.
+- A `Project` links to a `GitAccount` (commit identity + host + optional PAT credential); the Git routes resolve and decrypt the token before each host call.
 
 ## Navigation Architecture
 

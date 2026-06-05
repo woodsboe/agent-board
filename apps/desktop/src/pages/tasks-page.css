@@ -1,32 +1,97 @@
+.kanban-board {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
 .kanban-column {
-  min-width: 280px;
+  min-width: 264px;
+  width: 264px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.kanban-column.is-drop-target {
+  background: rgba(129, 140, 248, 0.12);
+  border-color: rgba(129, 140, 248, 0.55);
+}
+
+.kanban-column__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.kanban-column__count {
+  font-size: 12px;
+  opacity: 0.6;
 }
 
 .task-card {
   cursor: grab;
   outline: none;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  padding: 12px;
+  margin-bottom: 10px;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
-.task-card-lifted .spectrum-Well {
-  border: 1px solid rgba(132, 197, 255, 0.75);
-  box-shadow: 0 0 0 2px rgba(132, 197, 255, 0.25);
+.task-card:hover {
+  border-color: rgba(129, 140, 248, 0.5);
 }
 
-:root[data-board-density="compact"] .task-card .spectrum-Well {
-  padding: 10px;
+.task-card:active {
+  cursor: grabbing;
 }
 
-:root[data-board-density="compact"] .task-card .spectrum-ButtonGroup {
-  gap: 4px;
+.task-card.is-selected {
+  border-color: rgba(129, 140, 248, 0.85);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.5);
 }
 
 .task-card:focus-visible {
   box-shadow: 0 0 0 2px rgba(132, 197, 255, 0.75);
-  border-radius: 14px;
+}
+
+.task-card__title {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.task-card__meta {
+  font-size: 12px;
+  opacity: 0.72;
+  margin-top: 6px;
+}
+
+.task-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+:root[data-board-density="compact"] .task-card {
+  padding: 8px 10px;
+  margin-bottom: 7px;
+}
+
+:root[data-board-density="compact"] .task-card__meta {
+  display: none;
 }
 
 .detail-panel {
   resize: horizontal;
   overflow: auto;
-  min-width: 320px;
+  min-width: 340px;
 }

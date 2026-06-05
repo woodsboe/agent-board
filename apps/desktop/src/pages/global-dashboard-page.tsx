@@ -1,6 +1,6 @@
-import { Button, Content, Flex, Heading, ProgressCircle, Text, View, Well } from "@adobe/react-spectrum";
+import { Button, Content, Flex, ProgressCircle, Text, View, Well } from "@adobe/react-spectrum";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { SectionHeader, SurfaceCard } from "@agentboard/ui";
+import { SectionHeader, StatTile, SurfaceCard } from "@agentboard/ui";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 
@@ -36,22 +36,10 @@ export function GlobalDashboardPage() {
     <Flex direction="column" gap="size-250">
       <SectionHeader title="Dashboard" />
       <Flex gap="size-200" wrap>
-        <SurfaceCard title="Projects">
-          <Heading level={1}>{totalProjects}</Heading>
-          <Content>Tracked workspaces</Content>
-        </SurfaceCard>
-        <SurfaceCard title="Connected Agents">
-          <Heading level={1}>{agentProfilesQuery.data?.length ?? 0}</Heading>
-          <Content>Available execution profiles</Content>
-        </SurfaceCard>
-        <SurfaceCard title="Running Tasks">
-          <Heading level={1}>{runningTasks}</Heading>
-          <Content>Across all projects</Content>
-        </SurfaceCard>
-        <SurfaceCard title="Token Usage">
-          <Heading level={1}>{tokenUsage}</Heading>
-          <Content>Recent total tokens</Content>
-        </SurfaceCard>
+        <StatTile label="Projects" value={totalProjects} hint="Tracked workspaces" />
+        <StatTile label="Connected Agents" value={agentProfilesQuery.data?.length ?? 0} hint="Execution profiles" />
+        <StatTile label="Running Tasks" value={runningTasks} hint="Across all projects" />
+        <StatTile label="Token Usage" value={tokenUsage} hint="Recent total tokens" />
       </Flex>
       <Flex gap="size-200" wrap>
         <SurfaceCard title="Portfolio Status" description="Cross-project execution health at a glance.">

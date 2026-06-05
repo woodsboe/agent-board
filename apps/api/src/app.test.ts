@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildApp } from "./app";
-import { MockAgentService } from "./services/mock-agent-service";
 import { SimpleGitService } from "./services/simple-git-service";
 
 describe("app", () => {
   it("builds with service abstractions", async () => {
     const app = buildApp({
-      agentService: new MockAgentService(),
       gitService: new SimpleGitService(),
     });
 

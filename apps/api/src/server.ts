@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildApp } from "./app";
-import { MockAgentService } from "./services/mock-agent-service";
 import { SimpleGitService } from "./services/simple-git-service";
 
 const envPath = resolve(process.cwd(), ".env");
@@ -22,7 +21,6 @@ if (existsSync(envPath)) {
 }
 
 const app = buildApp({
-  agentService: new MockAgentService(),
   gitService: new SimpleGitService(),
 });
 
