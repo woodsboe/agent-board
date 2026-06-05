@@ -8,6 +8,7 @@ import {
 import { diffContextSnapshots, providerRuntimeKind, type AgentProvider } from "@agentboard/domain";
 import type { ContextSnapshotItem } from "@agentboard/domain";
 import { decryptSecret } from "../lib/crypto";
+import { resolveRepositoryPath } from "../lib/repository-path";
 import { mapAgentProfile, mapAgentRun } from "../lib/mappers";
 import { publishRunEvent, subscribeToRun } from "../lib/run-broker";
 import { resolveAdapter } from "../services/adapters/registry";
@@ -205,7 +206,7 @@ export async function agentRoutes(app: FastifyInstance) {
       apiKey,
       prompt,
       contextSnapshot,
-      repositoryPath: project.gitRepositoryPath,
+      repositoryPath: resolveRepositoryPath(project.gitRepositoryPath),
     });
 
     reply.code(201);

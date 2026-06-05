@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { GitAccountInfo } from "@agentboard/services";
 import { decryptSecret } from "../lib/crypto";
+import { resolveRepositoryPath } from "../lib/repository-path";
 
 /** Resolves a project's repo path + linked Git account, decrypting the PAT for host calls. */
 async function resolveAccount(
@@ -8,13 +9,14 @@ async function resolveAccount(
   projectId: string,
 ): Promise<{ repositoryPath: string; account: GitAccountInfo | null }> {
   const project = await app.prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  const repositoryPath = resolveRepositoryPath(project.gitRepositoryPath);
   if (!project.gitAccountId) {
-    return { repositoryPath: project.gitRepositoryPath, account: null };
+    return { repositoryPath, account: null };
   }
 
   const account = await app.prisma.gitAccount.findUnique({ where: { id: project.gitAccountId } });
   if (!account) {
-    return { repositoryPath: project.gitRepositoryPath, account: null };
+    return { repositoryPath, account: null };
   }
 
   let token: string | null = null;
@@ -30,7 +32,7 @@ async function resolveAccount(
   }
 
   return {
-    repositoryPath: project.gitRepositoryPath,
+    repositoryPath,
     account: {
       id: account.id,
       name: account.name,

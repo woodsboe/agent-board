@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import simpleGit from "simple-git";
 import type { GitAccountInfo, GitService } from "@agentboard/services";
 import type { GitDashboardDto, IssueDto, PullRequestDto } from "@agentboard/shared";
@@ -6,6 +7,22 @@ function accountSummary(account: GitAccountInfo | null): GitDashboardDto["accoun
   return account
     ? { id: account.id, name: account.name, authorName: account.authorName, authorEmail: account.authorEmail, host: account.host }
     : null;
+}
+
+/** Empty dashboard carrying a human-readable status in place of commit info. */
+function unavailableDashboard(account: GitAccountInfo | null, status: string): GitDashboardDto {
+  return {
+    branch: "",
+    latestCommit: status,
+    modifiedFiles: [],
+    untrackedFiles: [],
+    ahead: 0,
+    behind: 0,
+    tracking: null,
+    branches: [],
+    recentCommits: [],
+    account: accountSummary(account),
+  };
 }
 
 /** owner/repo (or group/subgroup/repo for GitLab) from an https or ssh remote URL. */
@@ -33,21 +50,15 @@ async function safeText(response: Response): Promise<string> {
 
 export class SimpleGitService implements GitService {
   async inspectRepository(repositoryPath: string, account: GitAccountInfo | null): Promise<GitDashboardDto> {
+    // simpleGit() throws synchronously if the directory is missing, so guard before constructing.
+    if (!repositoryPath || !existsSync(repositoryPath)) {
+      return unavailableDashboard(account, "Repository path not found");
+    }
+
     const git = simpleGit(repositoryPath);
     const isRepo = await git.checkIsRepo().catch(() => false);
     if (!isRepo) {
-      return {
-        branch: "",
-        latestCommit: "Not a Git repository",
-        modifiedFiles: [],
-        untrackedFiles: [],
-        ahead: 0,
-        behind: 0,
-        tracking: null,
-        branches: [],
-        recentCommits: [],
-        account: accountSummary(account),
-      };
+      return unavailableDashboard(account, "Not a Git repository");
     }
 
     const [status, log, branches] = await Promise.all([
