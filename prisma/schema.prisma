@@ -71,14 +71,34 @@ model Project {
 }
 
 model Plan {
-  id          String     @id @default(cuid())
-  projectId   String
-  title       String
-  description String
-  status      PlanStatus @default(Draft)
-  createdAt   DateTime   @default(now())
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  tasks       Task[]
+  id                   String     @id @default(cuid())
+  projectId            String
+  title                String
+  description          String
+  status               PlanStatus @default(Draft)
+  // Provenance for agent-generated plans (all null for manually created plans).
+  generatedByProfileId String?
+  generationModel      String?
+  generationMessages   String? // JSON: PlanMessage[] — the refine turns, kept for audit
+  generationTokens     String? // JSON: AgentTokenUsage — cost noted on the plan
+  convertedAt          DateTime?
+  createdAt            DateTime   @default(now())
+  project              Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks                Task[]
+  items                PlanItem[]
+}
+
+model PlanItem {
+  id                      String       @id @default(cuid())
+  planId                  String
+  order                   Int
+  title                   String
+  description             String
+  priority                TaskPriority @default(Medium)
+  suggestedAgentProfileId String?
+  suggestedContextPackId  String?
+  plan                    Plan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  task                    Task?
 }
 
 model Task {
@@ -92,10 +112,12 @@ model Task {
   priority               TaskPriority  @default(Medium)
   assignedAgentProfileId String?
   contextPackId          String?
+  planItemId             String?       @unique
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   project                Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   plan                   Plan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planItem               PlanItem?     @relation(fields: [planItemId], references: [id], onDelete: SetNull)
   parentTask             Task?         @relation("TaskTree", fields: [parentTaskId], references: [id], onDelete: SetNull)
   subtasks               Task[]        @relation("TaskTree")
   assignedAgentProfile   AgentProfile? @relation(fields: [assignedAgentProfileId], references: [id], onDelete: SetNull)

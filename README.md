@@ -25,7 +25,7 @@ AgentBoard is a production-oriented, local-first tool for orchestrating agentic 
 ## Implemented Features
 
 - Projects with repository path tracking and per-project Git account selection
-- Plans with draft, approval, and archive flows
+- Plans with draft, approval, and archive flows, plus **agent-assisted planning**: describe a goal, an agent drafts a structured plan (streamed), refine it, store it, and convert an approved plan into kanban tasks (idempotent, skip-only). Works offline via the mock runtime.
 - Tasks on a kanban board with native drag-and-drop, keyboard movement (← / →), a create/edit dialog, and a tabbed detail drawer (Overview / Context / Runs)
 - Context library with creation, search, tagging, and tabular browsing
 - Context pack builder with token budget tracking and duplication
@@ -118,10 +118,14 @@ The seed script creates:
 
 - `GET /projects`
 - `POST /projects`
-- `GET /plans`
-- `POST /plans`
+- `GET /plans` (includes each plan's ordered items)
+- `POST /plans` (optionally persists structured `items` + agent provenance in one call)
+- `PATCH /plans/:id`
 - `PATCH /plans/:id/approve`
 - `PATCH /plans/:id/archive`
+- `POST /plans/generate` (starts an agent-driven plan generation; returns a `generationId`)
+- `GET /plans/generations/:id/stream` (Server-Sent Events: status / chunk / done / error)
+- `POST /plans/:id/tasks` (converts an **approved** plan's items into tasks; skip-only & idempotent)
 - `GET /tasks`
 - `POST /tasks`
 - `PATCH /tasks/:id`

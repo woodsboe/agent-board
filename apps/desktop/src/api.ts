@@ -5,6 +5,7 @@ import type {
   AgentRunWithDiffDto,
   ContextItemDto,
   ContextPackDto,
+  ConvertPlanResultDto,
   CreateAgentProfileInput,
   CreateAgentRunInput,
   CreateContextItemInput,
@@ -16,10 +17,12 @@ import type {
   CreateTaskInput,
   CredentialDto,
   DashboardDto,
+  GeneratePlanInput,
   GitAccountDto,
   GitDashboardDto,
   IssueDto,
   PlanDto,
+  PlanGenerationEvent,
   ProjectDto,
   PullRequestDto,
   TaskDto,
@@ -36,9 +39,15 @@ import type {
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // Only advertise a JSON body when one is actually sent. Body-less calls
+  // (approve/archive/convert/duplicate/delete) must NOT set this header, or
+  // Fastify rejects the empty body with `FST_ERR_CTP_EMPTY_JSON_BODY` (400).
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
+  if (init?.body != null) headers["Content-Type"] = "application/json";
+
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers,
   });
 
   if (!response.ok) {
@@ -64,6 +73,9 @@ export const api = {
   updatePlan: (id: string, input: UpdatePlanInput) => request<PlanDto>(`/plans/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   approvePlan: (id: string) => request<PlanDto>(`/plans/${id}/approve`, { method: "PATCH" }),
   archivePlan: (id: string) => request<PlanDto>(`/plans/${id}/archive`, { method: "PATCH" }),
+  generatePlan: (input: GeneratePlanInput) =>
+    request<{ generationId: string }>("/plans/generate", { method: "POST", body: JSON.stringify(input) }),
+  convertPlanToTasks: (id: string) => request<ConvertPlanResultDto>(`/plans/${id}/tasks`, { method: "POST" }),
   getTasks: (projectId: string) => request<TaskDto[]>(`/tasks?projectId=${projectId}`),
   createTask: (input: CreateTaskInput) => request<TaskDto>("/tasks", { method: "POST", body: JSON.stringify(input) }),
   updateTask: (id: string, input: UpdateTaskInput) => request<TaskDto>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
@@ -127,6 +139,36 @@ export function streamAgentRun(
   source.onmessage = (message) => {
     try {
       const event = JSON.parse(message.data) as AgentRunEvent;
+      handlers.onEvent(event);
+      if (event.type === "done" || event.type === "error") close();
+    } catch {
+      // ignore keep-alive / malformed frames
+    }
+  };
+
+  source.onerror = () => close();
+
+  return () => source.close();
+}
+
+/**
+ * Subscribes to a plan generation's live SSE output. Mirrors {@link streamAgentRun}:
+ * auto-closes on the terminal `done`/`error` event and returns an unsubscribe function.
+ */
+export function streamPlanGeneration(
+  generationId: string,
+  handlers: { onEvent: (event: PlanGenerationEvent) => void; onClose?: () => void },
+): () => void {
+  const source = new EventSource(`${API_URL}/plans/generations/${generationId}/stream`);
+
+  const close = () => {
+    source.close();
+    handlers.onClose?.();
+  };
+
+  source.onmessage = (message) => {
+    try {
+      const event = JSON.parse(message.data) as PlanGenerationEvent;
       handlers.onEvent(event);
       if (event.type === "done" || event.type === "error") close();
     } catch {

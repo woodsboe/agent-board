@@ -6,6 +6,7 @@ import type {
   Credential,
   GitAccount,
   Plan,
+  PlanItem,
   Task,
   TokenUsage,
   Project,
@@ -13,15 +14,46 @@ import type {
 import type {
   AgentProfileDto,
   AgentRunDto,
+  AgentTokenUsageDto,
   ContextItemDto,
   ContextPackDto,
   CredentialDto,
   GitAccountDto,
   PlanDto,
+  PlanItemDto,
   ProjectDto,
   TaskDto,
   TokenUsageDto,
 } from "@agentboard/shared";
+
+/** A plan row with its items eagerly loaded (each item optionally linked to its converted task). */
+type PlanWithItems = Plan & {
+  items?: Array<PlanItem & { task?: { id: string } | null }>;
+};
+
+export function mapPlanItem(item: PlanItem & { task?: { id: string } | null }): PlanItemDto {
+  return {
+    id: item.id,
+    planId: item.planId,
+    order: item.order,
+    title: item.title,
+    description: item.description,
+    priority: item.priority as PlanItemDto["priority"],
+    suggestedAgentProfileId: item.suggestedAgentProfileId ?? null,
+    suggestedContextPackId: item.suggestedContextPackId ?? null,
+    taskId: item.task?.id ?? null,
+  };
+}
+
+/** Safely parse JSON provenance stored as a string column; returns null on absent/corrupt data. */
+function parseJson<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
 
 export function mapProject(project: Project): ProjectDto {
   return {
@@ -31,8 +63,23 @@ export function mapProject(project: Project): ProjectDto {
   };
 }
 
-export function mapPlan(plan: Plan): PlanDto {
-  return { ...plan, createdAt: plan.createdAt.toISOString() };
+export function mapPlan(plan: PlanWithItems): PlanDto {
+  return {
+    id: plan.id,
+    projectId: plan.projectId,
+    title: plan.title,
+    description: plan.description,
+    status: plan.status as PlanDto["status"],
+    generatedByProfileId: plan.generatedByProfileId ?? null,
+    generationModel: plan.generationModel ?? null,
+    generationTokens: parseJson<AgentTokenUsageDto>(plan.generationTokens),
+    convertedAt: plan.convertedAt ? plan.convertedAt.toISOString() : null,
+    createdAt: plan.createdAt.toISOString(),
+    items: (plan.items ?? [])
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map(mapPlanItem),
+  };
 }
 
 export function mapTask(task: Task): TaskDto {
