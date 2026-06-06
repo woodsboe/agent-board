@@ -26,13 +26,59 @@ export const projectSchema = z.object({
   updatedAt: timestampSchema,
 });
 
+/** Token accounting surfaced by an adapter — real when the runtime reports it, estimated otherwise. */
+export const agentTokenUsageSchema = z.object({
+  promptTokens: z.number().int().nonnegative(),
+  completionTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  estimatedCost: z.number().nonnegative(),
+});
+
+/** One conversational turn used while refining a generated plan. Persisted as JSON for audit. */
+export const planMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+});
+
+/** A persisted, ordered step of a plan — near-isomorphic to a Task so conversion is 1:1. */
+export const planItemSchema = z.object({
+  id: idSchema,
+  planId: idSchema,
+  order: z.number().int().nonnegative(),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  priority: z.enum(taskPriorities),
+  suggestedAgentProfileId: idSchema.nullable().optional(),
+  suggestedContextPackId: idSchema.nullable().optional(),
+  taskId: idSchema.nullable().optional(),
+});
+
+/** A single item in an agent's structured plan proposal (before it is stored). */
+export const planProposalItemSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  priority: z.enum(taskPriorities).default("Medium"),
+});
+
+/** The structured artifact an agent emits — the source of truth, never re-parsed from prose. */
+export const planProposalSchema = z.object({
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  items: z.array(planProposalItemSchema).min(1),
+});
+
 export const planSchema = z.object({
   id: idSchema,
   projectId: idSchema,
   title: z.string().min(1),
   description: z.string().min(1),
   status: z.enum(planStatuses),
+  generatedByProfileId: idSchema.nullable().optional(),
+  generationModel: z.string().nullable().optional(),
+  generationTokens: agentTokenUsageSchema.nullable().optional(),
+  convertedAt: timestampSchema.nullable().optional(),
   createdAt: timestampSchema,
+  items: z.array(planItemSchema),
 });
 
 export const taskSchema = z.object({
@@ -166,11 +212,24 @@ export const createProjectInputSchema = projectSchema.omit({
   updatedAt: true,
 });
 
-export const createPlanInputSchema = planSchema.omit({
-  id: true,
-  createdAt: true,
-}).extend({
+export const createPlanInputSchema = z.object({
+  projectId: idSchema,
+  title: z.string().min(1),
+  description: z.string().min(1),
   status: z.enum(planStatuses).default("Draft"),
+  generatedByProfileId: idSchema.nullable().optional(),
+  generationModel: z.string().nullable().optional(),
+  generationMessages: z.array(planMessageSchema).optional(),
+  generationTokens: agentTokenUsageSchema.nullable().optional(),
+  items: z.array(planProposalItemSchema).optional(),
+});
+
+/** Kick off an agent-driven plan generation. `messages` carries prior refine turns (empty on first run). */
+export const generatePlanInputSchema = z.object({
+  projectId: idSchema,
+  agentProfileId: idSchema,
+  goal: z.string().min(1),
+  messages: z.array(planMessageSchema).optional(),
 });
 
 export const createTaskInputSchema = taskSchema.omit({
@@ -246,7 +305,13 @@ export const issueSchema = z.object({
 });
 
 export const updateProjectInputSchema = createProjectInputSchema.partial();
-export const updatePlanInputSchema = createPlanInputSchema.partial();
+// Only scalar Plan fields are editable via PATCH (items are managed via generate/convert).
+export const updatePlanInputSchema = z.object({
+  projectId: idSchema.optional(),
+  title: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  status: z.enum(planStatuses).optional(),
+});
 export const updateTaskInputSchema = createTaskInputSchema.partial();
 export const updateContextItemInputSchema = createContextItemInputSchema.partial();
 export const updateContextPackInputSchema = createContextPackInputSchema.partial();
@@ -255,6 +320,12 @@ export const updateGitAccountInputSchema = createGitAccountInputSchema.partial()
 
 export type ProjectDto = z.infer<typeof projectSchema>;
 export type PlanDto = z.infer<typeof planSchema>;
+export type PlanItemDto = z.infer<typeof planItemSchema>;
+export type PlanProposalDto = z.infer<typeof planProposalSchema>;
+export type PlanProposalItemDto = z.infer<typeof planProposalItemSchema>;
+export type PlanMessage = z.infer<typeof planMessageSchema>;
+export type AgentTokenUsageDto = z.infer<typeof agentTokenUsageSchema>;
+export type GeneratePlanInput = z.infer<typeof generatePlanInputSchema>;
 export type TaskDto = z.infer<typeof taskSchema>;
 export type ContextItemDto = z.infer<typeof contextItemSchema>;
 export type ContextPackDto = z.infer<typeof contextPackSchema>;
@@ -291,6 +362,20 @@ export type AgentRunEvent =
   | { type: "chunk"; text: string }
   | { type: "done"; run: AgentRunDto }
   | { type: "error"; message: string };
+
+/** Server-sent events streamed while an agent generates a plan proposal. */
+export type PlanGenerationEvent =
+  | { type: "status"; status: "Running" | "Completed" | "Failed" }
+  | { type: "chunk"; text: string }
+  | { type: "done"; proposal: PlanProposalDto; tokenUsage: AgentTokenUsageDto }
+  | { type: "error"; message: string };
+
+/** Result of converting an approved plan's items into tasks (skip-only, idempotent). */
+export type ConvertPlanResultDto = {
+  created: number;
+  skipped: number;
+  tasks: TaskDto[];
+};
 
 export type DashboardDto = {
   projectId: string;
